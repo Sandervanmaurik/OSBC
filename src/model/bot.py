@@ -750,34 +750,6 @@ class Bot(ABC):
         else:
             self.log_msg("Run is already off.")
 
-    def use_bankers_note(self) -> bool:
-        """
-        Use the banker's note to note items in the last inventory slot (28th)
-        Returns: True if successful, False otherwise
-        """
-        try:
-            self.log_msg("Using banker's note...")
-
-            # Open inventory with F2 using safe key press
-            if not self._safe_key_press('f2'):
-                self.log_msg("Failed to press F2: window focus lost")
-                return False
-            time.sleep(0.5)
-
-            # Get the last inventory slot (28th slot, index 27)
-            last_slot = self.win.inventory_slots[27]
-
-            # Click the slot
-            self.mouse.move_to(last_slot.random_point())
-            time.sleep(0.5)
-            self.mouse.click()
-            time.sleep(1)
-            return True
-
-        except Exception as e:
-            self.log_msg(f"Error using banker's note: {e}")
-            return False
-
     # ===== Visual Detection Methods (Pure CV - No API Dependencies) =====
 
     def is_inventory_full_visual(self) -> bool:

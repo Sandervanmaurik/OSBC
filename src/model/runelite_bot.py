@@ -54,7 +54,7 @@ class RuneLiteWindow(Window):
         # Get current action coordinates from config
         config = get_machine_config()
         ca_config = config.get("ui_coordinates", "current_action", default={
-            "left": 10, "top": 25, "width": 128, "height": 20
+            "left": 0, "top": 0, "width": 256, "height": 60
         })
         self.current_action = Rectangle(
             left=ca_config["left"] + self.game_view.left,
