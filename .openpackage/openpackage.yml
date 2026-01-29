@@ -1,0 +1,5 @@
+name: Auto-OSBC
+packages:
+- name: auto-osbc-multi-agent
+  version: 1.0.0
+dev-packages: []

@@ -1,0 +1,82 @@
+# This file is managed by OpenPackage. Do not edit manually.
+
+packages:
+  Auto-OSBC:
+    files: {}
+    path: ./.openpackage/
+    version: 0.0.0
+  auto-osbc-multi-agent:
+    files:
+      AGENTS.md:
+        - AGENTS.md
+        - CLAUDE.md
+      agents\bot-developer.md:
+        - .claude/agents/bot-developer.md
+        - .cursor/agents/bot-developer.md
+        - .factory/droids/bot-developer.md
+        - .opencode/agents/bot-developer.md
+      agents\senior-developer.md:
+        - .claude/agents/senior-developer.md
+        - .cursor/agents/senior-developer.md
+        - .factory/droids/senior-developer.md
+        - .opencode/agents/senior-developer.md
+      agents\test-engineer.md:
+        - .claude/agents/test-engineer.md
+        - .cursor/agents/test-engineer.md
+        - .factory/droids/test-engineer.md
+        - .opencode/agents/test-engineer.md
+      agents\visual-debugger.md:
+        - .claude/agents/visual-debugger.md
+        - .cursor/agents/visual-debugger.md
+        - .factory/droids/visual-debugger.md
+        - .opencode/agents/visual-debugger.md
+      commands\quick-reference.md:
+        - .claude/commands/quick-reference.md
+        - .codex/prompts/quick-reference.md
+        - .cursor/commands/quick-reference.md
+        - .factory/commands/quick-reference.md
+        - .kilocode/workflows/quick-reference.md
+        - .opencode/commands/quick-reference.md
+        - .roo/commands/quick-reference.md
+      commands\senior-dev-checklist.md:
+        - .claude/commands/senior-dev-checklist.md
+        - .codex/prompts/senior-dev-checklist.md
+        - .cursor/commands/senior-dev-checklist.md
+        - .factory/commands/senior-dev-checklist.md
+        - .kilocode/workflows/senior-dev-checklist.md
+        - .opencode/commands/senior-dev-checklist.md
+        - .roo/commands/senior-dev-checklist.md
+      skills\bot-creation.md:
+        - .claude/skills/bot-creation.md
+        - .codex/skills/bot-creation.md
+        - .cursor/skills/bot-creation.md
+        - .factory/skills/bot-creation.md
+        - .kilocode/skills/bot-creation.md
+        - .opencode/skills/bot-creation.md
+        - .roo/skills/bot-creation.md
+      skills\efficient-script-writing.md:
+        - .claude/skills/efficient-script-writing.md
+        - .codex/skills/efficient-script-writing.md
+        - .cursor/skills/efficient-script-writing.md
+        - .factory/skills/efficient-script-writing.md
+        - .kilocode/skills/efficient-script-writing.md
+        - .opencode/skills/efficient-script-writing.md
+        - .roo/skills/efficient-script-writing.md
+      skills\human-behavior.md:
+        - .claude/skills/human-behavior.md
+        - .codex/skills/human-behavior.md
+        - .cursor/skills/human-behavior.md
+        - .factory/skills/human-behavior.md
+        - .kilocode/skills/human-behavior.md
+        - .opencode/skills/human-behavior.md
+        - .roo/skills/human-behavior.md
+      skills\senior-dev-principles.md:
+        - .claude/skills/senior-dev-principles.md
+        - .codex/skills/senior-dev-principles.md
+        - .cursor/skills/senior-dev-principles.md
+        - .factory/skills/senior-dev-principles.md
+        - .kilocode/skills/senior-dev-principles.md
+        - .opencode/skills/senior-dev-principles.md
+        - .roo/skills/senior-dev-principles.md
+    path: ~/.openpackage/registry/auto-osbc-multi-agent/1.0.0/
+    version: 1.0.0

@@ -143,6 +143,42 @@ understand the bot's states and behaviors..."
 
 ---
 
+### Senior Developer Agent
+**File:** [agents/senior-developer.md](agents/senior-developer.md)
+
+**Primary Focus:** Ensuring code quality, simplicity, and separation of concerns
+
+**Invoked When:**
+- User requests refactoring for readability or maintainability
+- Reviewing changes for risk or regressions
+- Designing architecture for new features
+- Eliminating duplication or over-complexity
+- Enforcing clean boundaries between concerns
+
+**Key Skills:**
+- Simplification and small-step refactoring
+- Clear responsibility boundaries
+- Testability and maintainability
+- Readability and naming
+- Risk and edge-case analysis
+
+**Calls Other Agents:**
+- **Test Engineer** â†’ To strengthen test coverage
+- **Bot Developer** â†’ To implement design changes
+
+**Example Invocation:**
+```
+User: "Refactor this bot to be easier to maintain"
+System: [Activates Senior Developer Agent]
+Senior Developer: "I'll focus on simplifying the design and separating concerns.
+First, I'll map responsibilities and propose the smallest safe refactor..."
+[Identifies responsibilities]
+[Extracts small helpers]
+[Updates tests as needed]
+```
+
+---
+
 ## Multi-Agent Collaboration Patterns
 
 ### Pattern 1: New Bot Development (Full Stack)
@@ -263,6 +299,13 @@ understand the bot's states and behaviors..."
 - ✅ Regression testing
 - ✅ Verifying randomness
 
+### Use **Senior Developer** when:
+- ✅ Refactoring for readability or maintainability
+- ✅ Reviewing architecture or boundaries
+- ✅ Reducing complexity or duplication
+- ✅ Designing for testability
+- ✅ Enforcing separation of concerns
+
 ### Use **Multiple Agents** when:
 - ✅ Complex features requiring full stack
 - ✅ Major refactoring
@@ -279,6 +322,7 @@ understand the bot's states and behaviors..."
 "Switch to visual debugger agent and fix the login detection"
 "Act as the bot developer and create a cooking bot"  
 "Use the test engineer persona to add tests for banking"
+"Use the senior developer persona to review this refactor"
 ```
 
 ### Implicit Activation (Automatic)
@@ -327,6 +371,15 @@ All agents have access to these shared skills:
 - Testing procedures
 - Common pitfalls
 
+### [Senior Developer Principles](skills/senior-dev-principles.md)
+**What:** Simple, readable, and maintainable code practices
+**Used By:** All agents
+**Contains:**
+- Separation of concerns checklist
+- Readability guidelines
+- Complexity guardrails
+- Testing guidance
+
 ### ⚡ [Quick Reference](commands/quick-reference.md)
 **What:** Instant command lookup
 **Used By:** All agents
@@ -336,6 +389,14 @@ All agents have access to these shared skills:
 - Debugging commands
 - Test running
 - Common workflows
+
+### [Senior Developer Checklist](commands/senior-dev-checklist.md)
+**What:** Quick review and quality gates
+**Used By:** All agents
+**Contains:**
+- Review questions
+- Quality gate commands
+- Small refactor moves
 
 ---
 
@@ -424,6 +485,12 @@ state and testing the template confidence..."
 fixtures for the different game states..."
 ```
 
+**Senior Developer:**
+```
+"I'll focus on code quality and separation of concerns. First, I'll map the
+responsibilities and propose a minimal, readable design..."
+```
+
 ---
 
 ## Success Metrics
@@ -449,6 +516,13 @@ fixtures for the different game states..."
 - ✅ Visual fixtures created
 - ✅ Coverage >80%
 
+### Senior Developer Success
+- ✅ Responsibilities are clearly separated
+- ✅ Code is simple and readable
+- ✅ Minimal changes with clear impact
+- ✅ Tests cover expected behavior
+- ✅ No unnecessary abstractions
+
 ---
 
 ## Quick Agent Selection Guide
@@ -458,6 +532,7 @@ fixtures for the different game states..."
 | "Create a new bot" | Bot Developer | Primary responsibility |
 | "Detection is failing" | Visual Debugger | CV expertise needed |
 | "Add tests" | Test Engineer | Testing expertise |
+| "Refactor for readability" | Senior Developer | Code quality + separation of concerns |
 | "Bot is too slow" | Visual Debugger → Bot Developer | Perf + optimization |
 | "Banking doesn't work" | Bot Developer + Visual Debugger | Logic + detection |
 | "Need full feature" | All three | Complete implementation |
