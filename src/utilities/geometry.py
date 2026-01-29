@@ -1,4 +1,5 @@
 import math
+import threading
 from typing import List, NamedTuple
 
 import cv2
@@ -9,8 +10,15 @@ import utilities.random_util as rd
 
 Point = NamedTuple("Point", x=int, y=int)
 
-# TODO: Remove this global variable. This is a temporary fix for a bug in mss.
-sct = mss.mss()
+# Thread-local storage for MSS instances to avoid threading issues
+_thread_local = threading.local()
+
+
+def get_mss_instance():
+    """Get or create a thread-local MSS instance."""
+    if not hasattr(_thread_local, 'sct'):
+        _thread_local.sct = mss.mss()
+    return _thread_local.sct
 
 
 class Rectangle:
@@ -74,8 +82,7 @@ class Rectangle:
         Returns:
             A BGR Numpy array representing the captured image.
         """
-        # with mss.mss() as sct:  # TODO: When MSS bug is fixed, reinstate this.
-        global sct  # TODO: When MSS bug is fixed, remove this.
+        sct = get_mss_instance()  # Get thread-local MSS instance
         monitor = self.to_dict()
         res = np.array(sct.grab(monitor))[:, :, :3]
         if self.subtract_list:

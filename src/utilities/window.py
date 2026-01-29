@@ -311,19 +311,27 @@ class Window:
         config = get_machine_config()
         cp_tabs_config = config.get_control_panel_tabs_config()
         
+        # Debug: print control panel position and config
+        print(f"[DEBUG] Control Panel position: left={cp.left}, top={cp.top}, width={cp.width}, height={cp.height}")
+        print(f"[DEBUG] cp_tabs_config: {cp_tabs_config}")
+        
         # Use configuration if available
         if "rows" in cp_tabs_config:
             # tab_width is at top level, not per-row
             tab_width = cp_tabs_config.get("tab_width", 30)
-            for row in cp_tabs_config["rows"]:
+            for row_idx, row in enumerate(cp_tabs_config["rows"]):
                 row_tab_width = row.get("tab_width", tab_width)
-                for x_pos in row["positions"]:
-                    self.cp_tabs.append(Rectangle(
+                for tab_idx, x_pos in enumerate(row["positions"]):
+                    tab_rect = Rectangle(
                         left=x_pos + cp.left,
                         top=row["y"] + cp.top,
                         width=row_tab_width,
                         height=row["height"]
-                    ))
+                    )
+                    self.cp_tabs.append(tab_rect)
+                    # Debug: print first few tabs
+                    if len(self.cp_tabs) <= 5:
+                        print(f"[DEBUG] Tab {len(self.cp_tabs)-1}: left={tab_rect.left}, top={tab_rect.top}, width={tab_rect.width}, height={tab_rect.height}")
         else:
             # Fallback to original logic
             slot_w, slot_h = 29, 26  # top row tab dimensions

@@ -254,14 +254,25 @@ class MachineConfig:
         })
     
     def get_control_panel_tabs_config(self) -> Dict[str, Any]:
-        """Get control panel tabs configuration."""
+        """Get control panel tabs configuration.
+        
+        CRITICAL: All positions are RELATIVE to the inv.png template location (control panel origin).
+        The inv.png template is searched for and found at runtime, so these must be offsets from that point.
+        
+        Tab order:
+        Top row (0-6): Combat, Skills, Quest, Inventory, Worn Equipment, Prayer, Magic
+        Bottom row (7-13): Clan, Friends, Account, Logout, Settings, Emotes, Music
+        """
         return self.get("ui_coordinates", "control_panel_tabs", default={
             "rows": [
-                {"y": 298, "height": 26, "positions": [10, 52, 94, 136, 178, 219, 261]},
-                {"y": 326, "height": 36, "positions": [10, 52, 94, 136, 178, 219, 261]}
+                # Top row: These positions are relative to control panel (inv.png) top-left corner
+                # Tabs start at x=0 and are spaced ~35px apart
+                {"y": 0, "height": 26, "positions": [0, 36, 72, 108, 144, 180, 216]},
+                # Bottom row: ~28-30px below top row
+                {"y": 28, "height": 28, "positions": [0, 36, 72, 108, 144, 180, 216]}
             ],
-            "tab_width": 30,
-            "combat_tab": {"width": 38, "x": 5}
+            "tab_width": 33,
+            "combat_tab": {"width": 33, "x": 0}
         })
 
     def get_window_zone(self, zone_name: str) -> Optional[Dict[str, Any]]:

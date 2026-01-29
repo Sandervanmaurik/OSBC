@@ -194,18 +194,18 @@
       }
     },
     "control_panel_tabs": {
-      "rows": [
+     "rows": [
         {
-          "y": 298,
-          "height": 26,
-          "positions": [10, 52, 94, 136, 178, 219, 261],
-          "tab_width": 30
+          "y": 4,
+          "height": 25,
+          "positions": [8, 42, 76, 110, 144, 178, 212],
+          "tab_width": 29
         },
         {
-          "y": 326,
-          "height": 36,
-          "positions": [10, 52, 94, 136, 178, 219, 261],
-          "tab_width": 30
+          "y": 33,
+          "height": 33,
+          "positions": [8, 42, 76, 110, 144, 178, 212],
+          "tab_width": 29
         }
       ],
       "combat_tab": {
