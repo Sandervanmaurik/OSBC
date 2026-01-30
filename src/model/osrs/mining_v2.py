@@ -64,6 +64,7 @@ class OSRSMiningV2(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         "Tin": "tin_ore.png",
         "Iron": "iron_ore.png",
     }
+    ORE_MATCH_CONFIDENCE = 0.35
 
     def __init__(self) -> None:
         bot_title = "Mining v2"
@@ -143,7 +144,8 @@ class OSRSMiningV2(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                 self._maybe_take_break()
 
                 if self._inventory_is_full():
-                    self.log_msg("Inventory full, handling...")
+                    count = self.count_inventory_items_visual()
+                    self.log_msg(f"Inventory full, handling... (count={count})")
                     handled = self._handle_inventory_full()
                     if handled:
                         last_progress_time = time.time()
@@ -216,21 +218,41 @@ class OSRSMiningV2(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         return False
 
     def _drop_inventory(self) -> bool:
+        self.log_msg(f"Drop inventory mode selected (ore_type={self.ore_type})")
         if self.ore_type == "Any":
-            self.log_msg("Dropping inventory...")
-            self.drop_all()
-            self._sleep(0.6, 1.4)
-            return True
+            return self._drop_any_ore()
 
         return self._drop_specific_ore()
+
+    def _drop_any_ore(self) -> bool:
+        self.log_msg(f"Scanning inventory for any ore templates (confidence={self.ORE_MATCH_CONFIDENCE})...")
+        slots_by_ore = self._find_ore_slots(list(self.ORE_TEMPLATES.keys()))
+        if not slots_by_ore:
+            self._stop_with_message("Inventory is full but no ore detected to drop. Stopping.")
+            return False
+
+        all_slots = sorted({slot for slots in slots_by_ore.values() for slot in slots})
+        ores = ", ".join(slots_by_ore.keys())
+        self.log_msg(f"Dropping ore ({ores}) from slots: {all_slots}")
+        self.drop(all_slots)
+        self._sleep(0.4, 1.0)
+
+        remaining = self.count_inventory_items_visual()
+        if self.is_inventory_full_visual():
+            self._stop_with_message("Inventory still full after dropping ore. Stopping.")
+            return False
+        self.log_msg(f"Drop complete. Inventory count now {remaining}.")
+
+        return True
 
     def _drop_specific_ore(self) -> bool:
         template_path = self._get_ore_template_path()
         if template_path is None:
             self._stop_with_message(f"No template available for ore type '{self.ore_type}'. Stopping.")
             return False
+        self.log_msg(f"Looking for {self.ore_type} ore template: {template_path}")
 
-        slots = self.find_item_in_inventory_visual(template_path, confidence=0.8)
+        slots = self.find_item_in_inventory_visual(template_path, confidence=self.ORE_MATCH_CONFIDENCE)
         if not slots:
             self._stop_with_message(
                 f"Inventory is full but no {self.ore_type} ore detected to drop. Stopping."
@@ -241,11 +263,13 @@ class OSRSMiningV2(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         self.drop(slots)
         self._sleep(0.4, 1.0)
 
+        remaining = self.count_inventory_items_visual()
         if self.is_inventory_full_visual():
             self._stop_with_message(
                 f"Inventory still full after dropping {self.ore_type} ore. Stopping."
             )
             return False
+        self.log_msg(f"Drop complete. Inventory count now {remaining}.")
 
         return True
 
@@ -254,6 +278,44 @@ class OSRSMiningV2(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         if not filename:
             return None
         return str(imsearch.get_template_path("mining", filename))
+
+    def _find_ore_slots(self, ore_types: List[str]) -> Dict[str, List[int]]:
+        found: Dict[str, List[int]] = {}
+        start = time.perf_counter()
+        slot_count = len(self.win.inventory_slots)
+        self.log_msg(f"_find_ore_slots start (slots={slot_count}, ores={ore_types})")
+        if slot_count == 0:
+            self.log_msg("_find_ore_slots aborted: no inventory slots available")
+            return found
+
+        for ore in ore_types:
+            ore_start = time.perf_counter()
+            try:
+                filename = self.ORE_TEMPLATES.get(ore)
+                if not filename:
+                    self.log_msg(f"_find_ore_slots skip: no template for ore '{ore}'")
+                    continue
+                template_path = str(imsearch.get_template_path("mining", filename))
+                self.log_msg(f"_find_ore_slots searching {ore} using {template_path}")
+                slots = self.find_item_in_inventory_visual(template_path, confidence=self.ORE_MATCH_CONFIDENCE)
+                if slots:
+                    self.log_msg(f"Detected {ore} ore in slots: {slots}")
+                    found[ore] = slots
+                else:
+                    self.log_msg(f"No {ore} ore detected")
+            except Exception as exc:
+                self.log_msg(f"_find_ore_slots error while searching {ore}: {exc}")
+            finally:
+                elapsed = time.perf_counter() - ore_start
+                self.log_msg(f"_find_ore_slots {ore} search time: {elapsed:.2f}s")
+
+            if time.perf_counter() - start > 6.0:
+                self.log_msg("_find_ore_slots timeout exceeded 6.0s, returning partial results")
+                break
+
+        total_elapsed = time.perf_counter() - start
+        self.log_msg(f"_find_ore_slots done in {total_elapsed:.2f}s, found={list(found.keys())}")
+        return found
 
     def _select_rock_target(self) -> Optional[RuneLiteObject]:
         color = self._resolve_tag_color(self.ore_tag_color_name)

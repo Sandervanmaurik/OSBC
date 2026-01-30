@@ -87,8 +87,30 @@ def __imagesearcharea(template: Union[cv2.Mat, str, Path], im: cv2.Mat, confiden
     Returns:
         A Rectangle outlining the found template inside the image.
     """
+    # If template has transparency, crop to non-transparent bounds first.
+    if (
+        len(template.shape) == 3
+        and template.shape[2] == 4
+        and template[:, :, 3].min() < 255
+    ):
+        alpha = template[:, :, 3]
+        ys, xs = np.where(alpha > 0)
+        if ys.size == 0 or xs.size == 0:
+            return None
+        y0, y1 = ys.min(), ys.max() + 1
+        x0, x1 = xs.min(), xs.max() + 1
+        template = template[y0:y1, x0:x1]
+
     # Get template dimensions
     hh, ww = template.shape[:2]
+    ih, iw = im.shape[:2]
+    if hh > ih or ww > iw:
+        # Scale template down to fit the search image while preserving aspect ratio.
+        scale = min(iw / ww, ih / hh)
+        new_w = max(1, int(ww * scale))
+        new_h = max(1, int(hh * scale))
+        template = cv2.resize(template, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        hh, ww = template.shape[:2]
 
     # Check if template has an alpha channel with actual transparency
     has_transparency = (
