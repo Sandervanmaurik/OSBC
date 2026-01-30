@@ -205,8 +205,8 @@ class MachineConfig:
     def get_inventory_config(self) -> Dict[str, int]:
         """Get inventory slot configuration."""
         return self.get("ui_coordinates", "inventory", default={
-            "slot_width": 31,
-            "slot_height": 31,
+            "slot_width": 36,
+            "slot_height": 36,
             "gap_x": 6,
             "gap_y": 4,
             "start_x": 40,

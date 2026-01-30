@@ -10,10 +10,12 @@ import argparse
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add project root and src/ to path (ensure repo code is used, not site-packages)
+_repo_root = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(_repo_root / "src"))
+sys.path.insert(0, str(_repo_root))
 
-from src.utilities.window import Window
+from utilities.window import Window
 import cv2
 
 

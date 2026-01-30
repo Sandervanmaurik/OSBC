@@ -355,18 +355,30 @@ class Window:
         config = get_machine_config()
         inv_config = config.get_inventory_config()
         
-        slot_w = inv_config.get("slot_width", 36) - 5  # Subtract 5 for actual clickable area
-        slot_h = inv_config.get("slot_height", 32) - 1  # Subtract 1 for actual clickable area
+        slot_w = inv_config.get("slot_width", 36)
+        slot_h = inv_config.get("slot_height", 32)
         gap_x = inv_config.get("gap_x", 6)
         gap_y = inv_config.get("gap_y", 4)
         start_x = inv_config.get("start_x", 40)
         start_y = inv_config.get("start_y", 44)
+
+        click_w = max(1, slot_w - 5)
+        click_h = max(1, slot_h - 1)
+        offset_x = max(0, (slot_w - click_w) // 2)
+        offset_y = max(0, (slot_h - click_h) // 2)
         
         y = start_y + cp.top
         for _ in range(7):
             x = start_x + cp.left
             for _ in range(4):
-                self.inventory_slots.append(Rectangle(left=x, top=y, width=slot_w, height=slot_h))
+                self.inventory_slots.append(
+                    Rectangle(
+                        left=x + offset_x,
+                        top=y + offset_y,
+                        width=click_w,
+                        height=click_h,
+                    )
+                )
                 x += slot_w + gap_x
             y += slot_h + gap_y
 

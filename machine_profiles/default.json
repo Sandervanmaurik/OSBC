@@ -150,11 +150,11 @@
       }
     },
     "inventory": {
-      "slot_width": 31,
-      "slot_height": 31,
-      "gap_x": 6,
+      "slot_width": 37,
+      "slot_height": 32,
+      "gap_x": 5,
       "gap_y": 4,
-      "start_x": 40,
+      "start_x": 39,
       "start_y": 44
     },
     "prayers": {
