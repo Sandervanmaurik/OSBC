@@ -157,6 +157,19 @@
       "start_x": 39,
       "start_y": 44
     },
+    "skills": {
+      "gap_x": 7,
+      "gap_y": 4,
+      "start_x": 26,
+      "start_y": 40,
+      "slot_width": 58,
+      "slot_height": 26,
+      "grid_rows": 8,
+      "grid_cols": 3,
+      "pad_left": 0,
+      "total_level_height": 15,
+      "total_level_gap": 2
+    },
     "prayers": {
       "prayer_width": 33,
       "prayer_height": 33,

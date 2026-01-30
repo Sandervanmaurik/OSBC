@@ -149,6 +149,11 @@ class Bot(ABC):
                 return
             self.reset_progress()
             self.set_status(BotStatus.RUNNING)
+            if hasattr(self, "on_start"):
+                try:
+                    self.on_start()
+                except Exception as exc:
+                    self.log_msg(f"on_start failed: {exc}")
             self.thread = BotThread(target=self.main_loop)
             self.thread.setDaemon(True)
             self.thread.start()

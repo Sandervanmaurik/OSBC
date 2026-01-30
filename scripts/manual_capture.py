@@ -300,6 +300,98 @@ def capture_inventory_states(description: str = "inventory_states",
     return captures
 
 
+def capture_skill_states(description: str = "skill_states",
+                         window_title: str = "RuneLite",
+                         output_dir: Optional[Path] = None) -> Dict[str, Path]:
+    """
+    Capture skills tab with slot overlays for testing.
+
+    Args:
+        description: Description for the capture session
+        window_title: Title of the game window
+        output_dir: Directory to save captures
+
+    Returns:
+        Dictionary mapping capture types to file paths
+    """
+    if output_dir is None:
+        output_dir = Path("debug_screenshots")
+
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    session_dir = output_dir / f"{timestamp}_{description}"
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"📁 Saving skills captures to: {session_dir}")
+
+    try:
+        window = Window(window_title, padding_top=26, padding_left=0)
+        window.initialize()
+        print(f"✅ Connected to window: '{window_title}'")
+    except Exception as e:
+        print(f"❌ Failed to initialize window: {e}")
+        return {}
+
+    captures = {}
+
+    try:
+        panel_screenshot = window.control_panel.screenshot()
+        raw_path = session_dir / "skills_raw.png"
+        cv2.imwrite(str(raw_path), panel_screenshot)
+        captures["skills_raw"] = raw_path
+        print("   ✅ Skills raw captured")
+
+        overlay = panel_screenshot.copy()
+        for i, slot in enumerate(window.skill_slots):
+            rel_x = slot.left - window.control_panel.left
+            rel_y = slot.top - window.control_panel.top
+            cv2.rectangle(
+                overlay,
+                (rel_x, rel_y),
+                (rel_x + slot.width, rel_y + slot.height),
+                (0, 255, 0),
+                1,
+            )
+            cv2.putText(
+                overlay,
+                str(i),
+                (rel_x + 2, rel_y + 12),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.3,
+                (0, 255, 0),
+                1,
+            )
+
+        if window.skill_total_level:
+            rel_x = window.skill_total_level.left - window.control_panel.left
+            rel_y = window.skill_total_level.top - window.control_panel.top
+            cv2.rectangle(
+                overlay,
+                (rel_x, rel_y),
+                (rel_x + window.skill_total_level.width, rel_y + window.skill_total_level.height),
+                (0, 165, 255),
+                1,
+            )
+            cv2.putText(
+                overlay,
+                "total",
+                (rel_x + 2, rel_y + 12),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.3,
+                (0, 165, 255),
+                1,
+            )
+
+        overlay_path = session_dir / "skills_with_slots.png"
+        cv2.imwrite(str(overlay_path), overlay)
+        captures["skills_with_slots"] = overlay_path
+        print("   ✅ Skills with slot overlay captured")
+
+    except Exception as e:
+        print(f"❌ Failed to capture skills: {e}")
+
+    return captures
+
+
 def main():
     """Command-line interface for manual capture tool."""
     parser = argparse.ArgumentParser(description="Auto-OSBC Manual Screenshot Capture Tool")
@@ -308,12 +400,15 @@ def main():
     parser.add_argument("--output", type=Path, help="Output directory")
     parser.add_argument("--regions", nargs="+", help="Specific regions to capture")
     parser.add_argument("--inventory", action="store_true", help="Capture inventory with slot overlays")
+    parser.add_argument("--skills", action="store_true", help="Capture skills tab with slot overlays")
     
     args = parser.parse_args()
     
     try:
         if args.inventory:
             captures = capture_inventory_states(args.description, args.window, args.output)
+        elif args.skills:
+            captures = capture_skill_states(args.description, args.window, args.output)
         elif args.regions:
             captures = capture_specific_regions(args.regions, args.description, args.window, args.output)
         else:

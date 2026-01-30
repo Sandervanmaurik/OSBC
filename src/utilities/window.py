@@ -86,6 +86,8 @@ class Window:
     control_panel: Rectangle = None  # https://i.imgur.com/BeMFCIe.png
     cp_tabs: List[Rectangle] = []  # https://i.imgur.com/huwNOWa.png
     inventory_slots: List[Rectangle] = []  # https://i.imgur.com/gBwhAwE.png
+    skill_slots: List[Rectangle] = []
+    skill_total_level: Rectangle = None
     spellbook_normal: List[Rectangle] = []  # https://i.imgur.com/vkKAfV5.png
     prayers: List[Rectangle] = []  # https://i.imgur.com/KRmC3YB.png
 
@@ -296,6 +298,7 @@ class Window:
         if cp := imsearch.search_img_in_rect(imsearch.get_template_path("ui_templates", "inv.png"), client_rect):
             self.__locate_cp_tabs(cp)
             self.__locate_inv_slots(cp)
+            self.__locate_skill_slots(cp)
             self.__locate_prayers(cp)
             self.__locate_spells(cp)
             self.control_panel = cp
@@ -381,6 +384,51 @@ class Window:
                 )
                 x += slot_w + gap_x
             y += slot_h + gap_y
+
+    def __locate_skill_slots(self, cp: Rectangle) -> None:
+        """
+        Creates Rectangles for each skill slot relative to the control panel, storing it in the class property.
+        """
+        self.skill_slots = []
+
+        config = get_machine_config()
+        skill_config = config.get_skills_config()
+
+        slot_w = skill_config.get("slot_width", 36)
+        slot_h = skill_config.get("slot_height", 36)
+        gap_x = skill_config.get("gap_x", 6)
+        gap_y = skill_config.get("gap_y", 4)
+        start_x = skill_config.get("start_x", 40)
+        start_y = skill_config.get("start_y", 44)
+        rows = skill_config.get("grid_rows", 8)
+        cols = skill_config.get("grid_cols", 3)
+        total_level_height = skill_config.get("total_level_height", 30)
+        total_level_gap = skill_config.get("total_level_gap", gap_y)
+
+        y = start_y + cp.top
+        for _ in range(rows):
+            x = start_x + cp.left
+            for _ in range(cols):
+                self.skill_slots.append(
+                    Rectangle(
+                        left=x,
+                        top=y,
+                        width=slot_w,
+                        height=slot_h,
+                    )
+                )
+                x += slot_w + gap_x
+            y += slot_h + gap_y
+
+        grid_width = (cols * slot_w) + ((cols - 1) * gap_x)
+        grid_height = (rows * slot_h) + ((rows - 1) * gap_y)
+        total_top = start_y + grid_height + total_level_gap + cp.top
+        self.skill_total_level = Rectangle(
+            left=start_x + cp.left,
+            top=total_top,
+            width=grid_width,
+            height=total_level_height,
+        )
 
     def __locate_prayers(self, cp: Rectangle) -> None:
         """

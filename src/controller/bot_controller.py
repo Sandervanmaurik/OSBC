@@ -112,6 +112,12 @@ class BotController(object):
         """
         self.view.frame_info.update_state(state)
 
+    def update_skills(self, skill_data):
+        """
+        Called from model. Tells view to update skill levels.
+        """
+        self.view.frame_info.update_skills(skill_data)
+
     def update_log(self, msg: str, overwrite: bool = False):
         """
         Called from model. Tells view to update log.
@@ -170,6 +176,12 @@ class MockBotController(object):
         Called from model. Tells view to update current bot state.
         """
         print(f"State: {state}")
+
+    def update_skills(self, skill_data):
+        """
+        Called from model. Tells view to update skill levels.
+        """
+        print(f"Skills: {skill_data}")
 
     def update_log(self, msg: str, overwrite: bool = False):
         """

@@ -115,12 +115,15 @@ class OSRSBotBehaviorMixin:
     def _random_skill_check(self) -> None:
         try:
             if len(self.win.cp_tabs) > 1 and len(self.win.cp_tabs) > 3:
-                self.mouse.move_to(self.win.cp_tabs[1].random_point(), mouseSpeed="fast")
-                self.mouse.click()
-                self._sleep(0.7, 1.8)
-                self.mouse.move_to(self.win.cp_tabs[3].random_point(), mouseSpeed="fast")
-                self.mouse.click()
-                self._sleep(0.2, 0.6)
+                if hasattr(self, "refresh_skill_levels"):
+                    self.refresh_skill_levels(open_tab=True, return_to_inventory=True)
+                else:
+                    self.mouse.move_to(self.win.cp_tabs[1].random_point(), mouseSpeed="fast")
+                    self.mouse.click()
+                    self._sleep(0.7, 1.8)
+                    self.mouse.move_to(self.win.cp_tabs[3].random_point(), mouseSpeed="fast")
+                    self.mouse.click()
+                    self._sleep(0.2, 0.6)
         except Exception as exc:
             self.log_msg(f"Skill check error: {exc}")
 

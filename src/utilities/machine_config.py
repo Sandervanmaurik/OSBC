@@ -212,6 +212,50 @@ class MachineConfig:
             "start_x": 40,
             "start_y": 44
         })
+
+    def get_skills_config(self) -> Dict[str, int]:
+        """Get skills grid configuration."""
+        inv_config = self.get_inventory_config()
+        inv_slot_w = inv_config.get("slot_width", 36)
+        inv_slot_h = inv_config.get("slot_height", 36)
+        inv_gap_x = inv_config.get("gap_x", 6)
+        inv_gap_y = inv_config.get("gap_y", 4)
+        inv_start_x = inv_config.get("start_x", 40)
+        inv_start_y = inv_config.get("start_y", 44)
+        inv_rows = inv_config.get("grid_rows", 7)
+        inv_cols = inv_config.get("grid_cols", 4)
+
+        inv_area_w = (inv_cols * inv_slot_w) + ((inv_cols - 1) * inv_gap_x)
+        inv_area_h = (inv_rows * inv_slot_h) + ((inv_rows - 1) * inv_gap_y)
+
+        overrides = self.get("ui_coordinates", "skills", default={})
+        pad_left = overrides.get("pad_left", 0)
+        rows = overrides.get("grid_rows", 8)
+        cols = overrides.get("grid_cols", 3)
+        gap_x = overrides.get("gap_x", inv_gap_x)
+        gap_y = overrides.get("gap_y", inv_gap_y)
+
+        slot_w = overrides.get("slot_width")
+        if slot_w is None:
+            slot_w = max(1, int(round((inv_area_w - (cols - 1) * gap_x) / cols)))
+
+        slot_h = overrides.get("slot_height")
+        if slot_h is None:
+            slot_h = max(1, int(round((inv_area_h - (rows - 1) * gap_y) / rows)))
+
+        base = {
+            "slot_width": slot_w,
+            "slot_height": slot_h,
+            "gap_x": gap_x,
+            "gap_y": gap_y,
+            "start_x": overrides.get("start_x", inv_start_x - pad_left),
+            "start_y": overrides.get("start_y", inv_start_y),
+            "grid_rows": rows,
+            "grid_cols": cols,
+            "total_level_height": overrides.get("total_level_height", 30),
+            "total_level_gap": overrides.get("total_level_gap", gap_y),
+        }
+        return base
     
     def get_prayers_config(self) -> Dict[str, int]:
         """Get prayers grid configuration."""

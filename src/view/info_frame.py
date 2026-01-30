@@ -1,4 +1,5 @@
 import pathlib
+from typing import Dict
 import tkinter
 
 import customtkinter
@@ -6,8 +7,10 @@ from PIL import Image, ImageTk
 from pynput import keyboard
 
 import utilities.settings as settings
+from utilities.osrs_skills import skill_names
 from utilities.game_launcher import Launchable
 from view.fonts.fonts import *
+from utilities.osrs_skills import skill_names
 
 
 class InfoFrame(customtkinter.CTkFrame):
@@ -30,7 +33,7 @@ class InfoFrame(customtkinter.CTkFrame):
 
         PATH = pathlib.Path(__file__).parent.parent.resolve()
 
-        self.rowconfigure((0, 2, 4, 5, 6), weight=0)  # rows will not resize
+        self.rowconfigure((0, 2, 4, 5, 6, 7), weight=0)  # rows will not resize
         self.rowconfigure((1, 3), weight=1)  # rows will resize
         self.columnconfigure(0, weight=1, minsize=200)
         self.columnconfigure(1, weight=0)
@@ -51,6 +54,49 @@ class InfoFrame(customtkinter.CTkFrame):
             "<Configure>",
             lambda e: self.lbl_script_desc.configure(wraplength=self.lbl_script_desc.winfo_width() - 10),
         )
+
+        # -- skill levels grid (3x8)
+        self.skills_frame = customtkinter.CTkFrame(master=self, fg_color=self._fg_color)
+        self.skills_frame.grid(column=0, row=3, sticky="nwes", padx=15)
+        for r in range(8):
+            self.skills_frame.rowconfigure(r, weight=1)
+        for c in range(3):
+            self.skills_frame.columnconfigure(c, weight=1)
+
+        skills_path = pathlib.Path(__file__).parent.parent.joinpath("images", "bot", "skills")
+        self.skill_images: Dict[str, ImageTk.PhotoImage] = {}
+        icon_size = 22
+        for name in skill_names():
+            icon_file = skills_path / f"{name}.png"
+            if not icon_file.exists():
+                continue
+            icon = Image.open(icon_file).convert("RGBA")
+            icon.thumbnail((icon_size, icon_size), Image.LANCZOS)
+            canvas = Image.new("RGBA", (icon_size, icon_size), (0, 0, 0, 0))
+            offset = ((icon_size - icon.width) // 2, (icon_size - icon.height) // 2)
+            canvas.paste(icon, offset, icon)
+            self.skill_images[name] = ImageTk.PhotoImage(canvas)
+
+        self.skill_value_labels = []
+        for i, name in enumerate(skill_names()):
+            cell = customtkinter.CTkFrame(master=self.skills_frame, fg_color=self._fg_color)
+            cell.grid(row=i // 3, column=i % 3, padx=4, pady=2, sticky="nsew")
+            cell.rowconfigure(0, weight=1)
+            cell.columnconfigure(0, weight=0)
+            cell.columnconfigure(1, weight=1)
+
+            icon = self.skill_images.get(name)
+            icon_label = customtkinter.CTkLabel(master=cell, image=icon, text="")
+            icon_label.grid(row=0, column=0, padx=(2, 4), pady=1, sticky="w")
+
+            value_label = customtkinter.CTkLabel(
+                master=cell,
+                text="--",
+                font=log_font(12),
+                justify=tkinter.LEFT,
+            )
+            value_label.grid(row=0, column=1, padx=(0, 2), pady=1, sticky="w")
+            self.skill_value_labels.append(value_label)
 
         # -- script progress bar
         self.lbl_progress = customtkinter.CTkLabel(master=self, text="Progress: 0%", font=small_font(), justify=tkinter.CENTER)
@@ -172,6 +218,8 @@ class InfoFrame(customtkinter.CTkFrame):
         self.lbl_script_desc.configure(text=description)
         self.lbl_status.configure(text="Status: Idle")
         self.lbl_state.configure(text="State: Idle")
+        for lbl in self.skill_value_labels:
+            lbl.configure(text="--")
         if self.controller.model:
             if isinstance(self.controller.model, Launchable):
                 self.btn_launch.grid(row=3, column=0, pady=15, sticky="nsew")
@@ -292,3 +340,16 @@ class InfoFrame(customtkinter.CTkFrame):
         Called from controller. Updates the current bot state label.
         """
         self.lbl_state.configure(text=f"State: {state}")
+
+    def update_skills(self, skill_data):
+        """
+        Called from controller. Updates the skill levels display.
+        """
+        if not isinstance(skill_data, dict):
+            return
+        for idx, name in enumerate(skill_names()):
+            if idx >= len(self.skill_value_labels):
+                break
+            level = skill_data.get(name, -1)
+            text = "?" if level < 0 else str(level)
+            self.skill_value_labels[idx].configure(text=text)
