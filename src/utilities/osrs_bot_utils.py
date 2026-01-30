@@ -94,7 +94,7 @@ class OSRSBotBehaviorMixin:
     def _random_mouse_movement(self) -> None:
         try:
             point = self.win.game_view.random_point()
-            self.mouse.move_to(point, mouseSpeed=random.choice(["slow", "medium", "fast"]))
+            self.mouse.move_to(point, mouseSpeed=random.choice(["medium", "fast", "fastest"]))
             self._sleep(0.2, 0.7)
         except Exception as exc:
             self.log_msg(f"Random mouse movement error: {exc}")

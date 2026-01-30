@@ -475,15 +475,15 @@ class Bot(ABC):
                 p = slot.random_point()
                 self.mouse.move_to(
                     (p[0], p[1]),
-                    mouseSpeed="fast",
+                    mouseSpeed="fastest",
                     knotsCount=1,
                     offsetBoundaryY=40,
                     offsetBoundaryX=40,
                     tween=pytweening.easeInOutQuad,
                 )
-                time.sleep(rd.truncated_normal_sample(0.03, 0.12, mean=0.07, std=0.02))
+                time.sleep(rd.truncated_normal_sample(0.005, 0.02, mean=0.01, std=0.006))
                 self.mouse.click()
-                time.sleep(rd.truncated_normal_sample(0.03, 0.10, mean=0.06, std=0.02))
+                time.sleep(rd.truncated_normal_sample(0.005, 0.025, mean=0.01, std=0.006))
         finally:
             # Always release shift to prevent stuck key
             self._safe_key_up("shift")
