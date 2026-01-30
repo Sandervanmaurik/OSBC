@@ -2,6 +2,8 @@ import random
 import time
 from typing import Dict, List, Optional
 
+import cv2
+import numpy as np
 import pyautogui as pag
 
 import utilities.color as clr
@@ -32,6 +34,20 @@ class OSRSMiningV2(OSRSBot, launcher.Launchable):
         "Red": clr.RED,
         "White": clr.WHITE,
     }
+
+    COLOR_BASES: Dict[str, tuple[int, int, int]] = {
+        "Pink": (255, 0, 255),
+        "Green": (0, 255, 0),
+        "Cyan": (0, 255, 255),
+        "Yellow": (255, 255, 0),
+        "Red": (255, 0, 0),
+        "White": (255, 255, 255),
+    }
+
+    PINK_TAG_RANGE = ([205, 0, 205], [255, 80, 255])
+
+    TAG_COLOR_TOLERANCE = 35
+    MIN_TAG_AREA = 60
 
     INVENTORY_MODES = [
         "Bank (tagged)",
@@ -357,8 +373,8 @@ class OSRSMiningV2(OSRSBot, launcher.Launchable):
         return str(imsearch.get_template_path("mining", filename))
 
     def _select_rock_target(self) -> Optional[RuneLiteObject]:
-        color = self.COLOR_OPTIONS.get(self.ore_tag_color_name, clr.PINK)
-        rocks = self.get_all_tagged_in_rect(self.win.game_view, color)
+        color = self._resolve_tag_color(self.ore_tag_color_name)
+        rocks = self._get_tagged_rocks(color)
         if not rocks:
             return None
         valid = [rock for rock in rocks if self._is_valid_target(rock)]
@@ -551,3 +567,48 @@ class OSRSMiningV2(OSRSBot, launcher.Launchable):
     def _stop_with_message(self, message: str) -> None:
         self.log_msg(message)
         self.set_status(BotStatus.STOPPED)
+
+    def _resolve_tag_color(self, name: str):
+        if name == "Pink":
+            lower, upper = self.PINK_TAG_RANGE
+            return clr.Color(lower, upper)
+        rgb = self.COLOR_BASES.get(name, (255, 0, 255))
+        tolerance = self.TAG_COLOR_TOLERANCE
+        lower = [max(0, channel - tolerance) for channel in rgb]
+        upper = [min(255, channel + tolerance) for channel in rgb]
+        return clr.Color(lower, upper)
+
+    def _get_tagged_rocks(self, color: clr.Color) -> List[RuneLiteObject]:
+        rocks = self.get_all_tagged_in_rect(self.win.game_view, color)
+        if rocks:
+            return rocks
+        self.log_msg("Fallback tag detection activated (small outlines).")
+        return self._get_tagged_rocks_fallback(color)
+
+    def _get_tagged_rocks_fallback(self, color: clr.Color) -> List[RuneLiteObject]:
+        game_view = self.win.game_view
+        img = game_view.screenshot()
+        mask = clr.isolate_colors(img, color)
+        kernel = np.ones((2, 2), np.uint8)
+        mask = cv2.dilate(mask, kernel, iterations=1)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        rocks: List[RuneLiteObject] = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < self.MIN_TAG_AREA:
+                continue
+            x, y, w, h = cv2.boundingRect(contour)
+            obj_mask = np.zeros(mask.shape, dtype=np.uint8)
+            cv2.drawContours(obj_mask, [contour], -1, 255, -1)
+            indices = np.where(obj_mask == 255)
+            if indices[0].size == 0:
+                continue
+            x_min, x_max = np.min(indices[1]), np.max(indices[1])
+            y_min, y_max = np.min(indices[0]), np.max(indices[0])
+            width, height = x_max - x_min, y_max - y_min
+            center = [int(x_min + (width / 2)), int(y_min + (height / 2))]
+            axis = np.column_stack((indices[1], indices[0]))
+            rock = RuneLiteObject(x_min, x_max, y_min, y_max, width, height, center, axis)
+            rock.set_rectangle_reference(game_view)
+            rocks.append(rock)
+        return rocks
