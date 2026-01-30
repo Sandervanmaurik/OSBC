@@ -106,6 +106,12 @@ class BotController(object):
         """
         self.view.frame_info.update_progress(self.model.progress)
 
+    def update_state(self, state: str):
+        """
+        Called from model. Tells view to update current bot state.
+        """
+        self.view.frame_info.update_state(state)
+
     def update_log(self, msg: str, overwrite: bool = False):
         """
         Called from model. Tells view to update log.
@@ -158,6 +164,12 @@ class MockBotController(object):
         Called from model. Tells view to update progress.
         """
         print(f"Progress: {int(self.model.progress * 100)}%")
+
+    def update_state(self, state: str):
+        """
+        Called from model. Tells view to update current bot state.
+        """
+        print(f"State: {state}")
 
     def update_log(self, msg: str, overwrite: bool = False):
         """

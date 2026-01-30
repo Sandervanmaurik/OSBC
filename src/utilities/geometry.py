@@ -44,10 +44,11 @@ class Rectangle:
         Returns:
             A Rectangle object.
         """
-        self.left = left
-        self.top = top
-        self.width = width
-        self.height = height
+        # Cast to built-in int to avoid numpy integer issues with downstream APIs (e.g. mss).
+        self.left = int(left)
+        self.top = int(top)
+        self.width = int(width)
+        self.height = int(height)
 
     def set_rectangle_reference(self, rect):
         """

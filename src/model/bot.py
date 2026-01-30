@@ -2,6 +2,7 @@
 A Bot is a base class for bot script models. It is abstract and cannot be instantiated. Many of the methods in this base class are
 pre-implemented and can be used by subclasses, or called by the controller. Code in this class should not be modified.
 """
+import random
 import re
 import threading
 import time
@@ -94,6 +95,7 @@ class Bot(ABC):
         self.win = window
         # Wire up mouse with window for focus checks
         self.mouse.set_window(window)
+        self.current_state = "Idle"
 
     @abstractmethod
     def main_loop(self):
@@ -209,6 +211,14 @@ class Bot(ABC):
         self.status = status
         self.controller.update_status()
 
+    def set_state(self, state: str) -> None:
+        """
+        Sets a human-readable bot state and notifies the controller to update UI.
+        """
+        self.current_state = state
+        if hasattr(self, "controller") and self.controller:
+            self.controller.update_state(state)
+
     def log_msg(self, msg: str, overwrite=False):
         """
         Sends a message to the controller to be displayed in the log for the user.
@@ -288,9 +298,52 @@ class Bot(ABC):
         # Determine slots to skip
         if skip_slots is None:
             skip_slots = []
+        else:
+            skip_slots = list(skip_slots)
         if skip_rows > 0:
             row_skip = list(range(skip_rows * 4))
-            skip_slots = np.unique(row_skip + skip_slots)
+            skip_slots = list(np.unique(row_skip + skip_slots))
+        skip_set = {int(slot) for slot in skip_slots}
+
+        total_slots = len(self.win.inventory_slots)
+        if total_slots == 0:
+            return
+
+        slots_per_row = 4
+        total_rows = (total_slots + slots_per_row - 1) // slots_per_row
+        drop_set = {i for i in range(total_slots) if i not in skip_set}
+        if not drop_set:
+            return
+
+        rows = []
+        for row in range(total_rows):
+            row_indices = []
+            base = row * slots_per_row
+            for col in range(slots_per_row):
+                idx = base + col
+                if idx >= total_slots:
+                    break
+                if idx in drop_set:
+                    row_indices.append(idx)
+            rows.append(row_indices)
+
+        def _sleep_range(min_s: float, max_s: float) -> None:
+            time.sleep(rd.truncated_normal_sample(min_s, max_s))
+
+        def _click_slot(slot_idx: int, speed: str, pre: tuple, post: tuple) -> None:
+            slot = self.win.inventory_slots[slot_idx]
+            p = slot.random_point()
+            self.mouse.move_to(
+                (p[0], p[1]),
+                mouseSpeed=speed,
+                knotsCount=1,
+                offsetBoundaryY=40,
+                offsetBoundaryX=40,
+                tween=pytweening.easeInOutQuad,
+            )
+            _sleep_range(pre[0], pre[1])
+            self.mouse.click()
+            _sleep_range(post[0], post[1])
 
         # Ensure focus and press shift with verification
         if not self._safe_key_down("shift"):
@@ -298,26 +351,101 @@ class Bot(ABC):
             return
 
         try:
-            for i, slot in enumerate(self.win.inventory_slots):
-                if i in skip_slots:
-                    continue
-                # Re-verify focus periodically during long operations
-                if i % 7 == 0 and i > 0:
-                    if not self._ensure_focus():
-                        self.log_msg("Focus lost during drop, aborting...")
+            use_column_pattern = rd.random_chance(0.35)
+            click_count = 0
+            aborted = False
+
+            if use_column_pattern:
+                order = []
+                for pair_start in range(0, total_rows, 2):
+                    for col in range(slots_per_row):
+                        idx_a = pair_start * slots_per_row + col
+                        idx_b = (pair_start + 1) * slots_per_row + col
+                        if idx_a in drop_set:
+                            order.append(idx_a)
+                        if idx_b in drop_set:
+                            order.append(idx_b)
+
+                for i, slot_idx in enumerate(order):
+                    if i % 7 == 0 and i > 0:
+                        if not self._ensure_focus():
+                            self.log_msg("Focus lost during drop, aborting...")
+                            aborted = True
+                            break
+                    _click_slot(
+                        slot_idx,
+                        speed=random.choice(["fast", "fastest"]),
+                        pre=(0.02, 0.12),
+                        post=(0.02, 0.12),
+                    )
+                    click_count += 1
+                    if click_count % (slots_per_row * 2) == 0:
+                        _sleep_range(0.08, 0.25)
+            else:
+                non_empty_rows = [row for row in rows if row]
+                missed_slot = None
+                missed_row = None
+                missed_pending = False
+                dropped_slots: List[int] = []
+
+                if len(non_empty_rows) >= 3 and rd.random_chance(0.2):
+                    candidate_rows = list(range(1, len(non_empty_rows) - 1))
+                    if candidate_rows:
+                        missed_row = random.choice(candidate_rows)
+                        missed_slot = random.choice(non_empty_rows[missed_row])
+
+                for row_idx, row_slots in enumerate(non_empty_rows):
+                    for slot_idx in row_slots:
+                        if missed_slot is not None and row_idx == missed_row and slot_idx == missed_slot:
+                            if dropped_slots:
+                                misclick_slot = random.choice(dropped_slots)
+                                _click_slot(
+                                    misclick_slot,
+                                    speed="fast",
+                                    pre=(0.02, 0.08),
+                                    post=(0.02, 0.08),
+                                )
+                            else:
+                                _sleep_range(0.03, 0.12)
+                            missed_pending = True
+                            continue
+
+                        if click_count % 7 == 0 and click_count > 0:
+                            if not self._ensure_focus():
+                                self.log_msg("Focus lost during drop, aborting...")
+                                aborted = True
+                                break
+
+                        _click_slot(
+                            slot_idx,
+                            speed="fastest",
+                            pre=(0.01, 0.08),
+                            post=(0.01, 0.08),
+                        )
+                        dropped_slots.append(slot_idx)
+                        click_count += 1
+
+                    if aborted:
                         break
-                p = slot.random_point()
-                self.mouse.move_to(
-                    (p[0], p[1]),
-                    mouseSpeed="fastest",
-                    knotsCount=1,
-                    offsetBoundaryY=40,
-                    offsetBoundaryX=40,
-                    tween=pytweening.easeInOutQuad,
-                )
-                time.sleep(rd.truncated_normal_sample(0.01, 0.6, mean=0.03, std=0.02))
-                self.mouse.click()
-                time.sleep(rd.truncated_normal_sample(0.01, 0.6, mean=0.03, std=0.02))
+
+                    _sleep_range(0.12, 0.35)
+
+                    if missed_pending and row_idx == (missed_row + 1):
+                        _sleep_range(0.08, 0.25)
+                        if click_count % 7 == 0 and click_count > 0:
+                            if not self._ensure_focus():
+                                self.log_msg("Focus lost during drop, aborting...")
+                                aborted = True
+                                break
+                        _click_slot(
+                            missed_slot,
+                            speed="fast",
+                            pre=(0.02, 0.1),
+                            post=(0.02, 0.1),
+                        )
+                        dropped_slots.append(missed_slot)
+                        click_count += 1
+                        missed_pending = False
         finally:
             # Always release shift to prevent stuck key
             self._safe_key_up("shift")

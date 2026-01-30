@@ -30,7 +30,7 @@ class InfoFrame(customtkinter.CTkFrame):
 
         PATH = pathlib.Path(__file__).parent.parent.resolve()
 
-        self.rowconfigure((0, 2, 4, 5), weight=0)  # rows will not resize
+        self.rowconfigure((0, 2, 4, 5, 6), weight=0)  # rows will not resize
         self.rowconfigure((1, 3), weight=1)  # rows will resize
         self.columnconfigure(0, weight=1, minsize=200)
         self.columnconfigure(1, weight=0)
@@ -143,7 +143,10 @@ class InfoFrame(customtkinter.CTkFrame):
         self.btn_launch.configure(state=tkinter.DISABLED)
 
         self.lbl_status = customtkinter.CTkLabel(master=self, text="Status: Idle", font=small_font(), justify=tkinter.CENTER)
-        self.lbl_status.grid(row=5, column=1, pady=(0, 15), sticky="we")
+        self.lbl_status.grid(row=5, column=1, pady=(0, 5), sticky="we")
+
+        self.lbl_state = customtkinter.CTkLabel(master=self, text="State: Idle", font=small_font(), justify=tkinter.CENTER)
+        self.lbl_state.grid(row=6, column=1, pady=(0, 15), sticky="we")
 
         self.controller = None
         self.options_class = None
@@ -168,6 +171,7 @@ class InfoFrame(customtkinter.CTkFrame):
         self.lbl_script_title.configure(text=title)
         self.lbl_script_desc.configure(text=description)
         self.lbl_status.configure(text="Status: Idle")
+        self.lbl_state.configure(text="State: Idle")
         if self.controller.model:
             if isinstance(self.controller.model, Launchable):
                 self.btn_launch.grid(row=3, column=0, pady=15, sticky="nsew")
@@ -282,3 +286,9 @@ class InfoFrame(customtkinter.CTkFrame):
         """
         self.progressbar.set(progress)
         self.lbl_progress.configure(text=f"Progress: {progress*100:.0f}%")
+
+    def update_state(self, state: str):
+        """
+        Called from controller. Updates the current bot state label.
+        """
+        self.lbl_state.configure(text=f"State: {state}")
