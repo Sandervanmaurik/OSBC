@@ -4,5 +4,6 @@ from .home_view_runelite import RuneLiteHomeView
 from .info_frame import InfoFrame
 from .output_log_frame import OutputLogFrame
 from .settings_view import SettingsView
+from .skills_frame import SkillsFrame
 from .sprite_scraper_view import SpriteScraperView
 from .title_view import TitleView

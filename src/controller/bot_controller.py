@@ -1,6 +1,7 @@
 """
 Serves as the mediator between a bot and the UI. Methods should likely not be modified.
 """
+
 import importlib
 import sys
 from model.bot import Bot, BotStatus
@@ -35,7 +36,7 @@ class BotController(object):
             # Transfer necessary state
             new_model.set_controller(self)
             new_model.options_set = self.model.options_set
-            if hasattr(self.model, 'options'):
+            if hasattr(self.model, "options"):
                 new_model.save_options(self.model.options)
             # Replace model
             self.model = new_model
@@ -116,7 +117,7 @@ class BotController(object):
         """
         Called from model. Tells view to update skill levels.
         """
-        self.view.frame_info.update_skills(skill_data)
+        self.view.frame_skills.update_skills(skill_data)
 
     def update_log(self, msg: str, overwrite: bool = False):
         """
@@ -141,14 +142,19 @@ class BotController(object):
             try:
                 self.model.stop()
             except AttributeError:
-                print("Could not stop bot thread when changing views as it was not running. This is normal.")
+                print(
+                    "Could not stop bot thread when changing views as it was not running. This is normal."
+                )
             self.model.options_set = False
         self.model = model
         if self.model is not None:
-            self.view.frame_info.setup(title=model.bot_title, description=model.description)
+            self.view.frame_info.setup(
+                title=model.bot_title, description=model.description
+            )
             self.view.frame_info.start_keyboard_listener()
         else:
             self.view.frame_info.setup(title="", description="")
+        # Note: Skills data persists across bot switches - do NOT reset here
         self.clear_log()
 
 

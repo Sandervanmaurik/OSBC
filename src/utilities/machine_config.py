@@ -2,6 +2,7 @@
 Machine-specific configuration management for Auto-OSBC.
 Handles loading and accessing machine profiles for multi-machine support.
 """
+
 import json
 import os
 import socket
@@ -12,40 +13,40 @@ from typing import Dict, Any, Optional, Tuple
 class MachineConfig:
     """
     Manages machine-specific configurations for different systems.
-    
+
     Loads configuration from JSON files in the machine_profiles directory,
     with automatic machine detection and environment variable override support.
     """
-    
+
     _instance = None
     _profile: Dict[str, Any] = None
     _profile_name: str = None
-    
+
     def __new__(cls):
         """Singleton pattern to ensure single config instance."""
         if cls._instance is None:
             cls._instance = super(MachineConfig, cls).__new__(cls)
             cls._instance._load_profile()
         return cls._instance
-    
+
     def _load_profile(self) -> None:
         """Load the appropriate machine profile."""
         # Determine profile name
         profile_name = self._get_profile_name()
-        
+
         # Get profiles directory
         profiles_dir = Path(__file__).parent.parent.parent / "machine_profiles"
         profile_path = profiles_dir / f"{profile_name}.json"
-        
+
         # Fall back to default if specific profile doesn't exist
         if not profile_path.exists():
             print(f"Machine profile '{profile_name}' not found, using default")
             profile_path = profiles_dir / "default.json"
             profile_name = "default"
-        
+
         # Load the profile
         try:
-            with open(profile_path, 'r') as f:
+            with open(profile_path, "r") as f:
                 self._profile = json.load(f)
                 self._profile_name = profile_name
                 print(f"Loaded machine profile: {profile_name}")
@@ -54,11 +55,11 @@ class MachineConfig:
             # Create minimal default profile
             self._profile = self._create_minimal_profile()
             self._profile_name = "minimal"
-    
+
     def _get_profile_name(self) -> str:
         """
         Determine which profile to use.
-        
+
         Priority:
         1. OSBC_MACHINE_PROFILE environment variable
         2. Machine hostname mapping
@@ -67,22 +68,22 @@ class MachineConfig:
         # Check environment variable first
         if env_profile := os.getenv("OSBC_MACHINE_PROFILE"):
             return env_profile
-        
+
         # Check hostname mapping
         hostname = socket.gethostname().lower()
-        
+
         # Add your machine hostname mappings here
         hostname_map = {
             "adamhblade": "laptop",  # Laptop machine
             "desktop-agh04lj": "desktop",  # Desktop machine
         }
-        
+
         if hostname in hostname_map:
             return hostname_map[hostname]
-        
+
         # Default profile
         return "default"
-    
+
     def _create_minimal_profile(self) -> Dict[str, Any]:
         """Create a minimal default profile with hardcoded values."""
         return {
@@ -92,32 +93,26 @@ class MachineConfig:
                 "dpi_scale": 1.0,
                 "runelite_window": {
                     "default_size": [773, 534],
-                    "padding": {"top": 26, "left": 0}
-                }
+                    "padding": {"top": 26, "left": 0},
+                },
             },
-            "app": {
-                "width": 680,
-                "height": 480
-            },
-            "options_ui": {
-                "width": 500,
-                "height": 400
-            }
+            "app": {"width": 1100, "height": 960},
+            "options_ui": {"width": 500, "height": 400},
         }
-    
+
     @property
     def profile_name(self) -> str:
         """Get the current profile name."""
         return self._profile_name
-    
+
     def get(self, *keys: str, default: Any = None) -> Any:
         """
         Get a value from the profile using dot notation.
-        
+
         Args:
             *keys: Path to the value (e.g., "display", "runelite_window", "padding")
             default: Default value if key not found
-            
+
         Returns:
             The value at the specified path, or default if not found
         """
@@ -128,15 +123,17 @@ class MachineConfig:
             else:
                 return default
         return value
-    
+
     def get_window_padding(self) -> Tuple[int, int]:
         """Get window padding values (top, left)."""
         padding = self.get("display", "runelite_window", "padding", default={})
         return padding.get("top", 26), padding.get("left", 0)
-    
+
     def get_window_default_size(self) -> Tuple[int, int]:
         """Get default window size (width, height)."""
-        size = self.get("display", "runelite_window", "default_size", default=[773, 534])
+        size = self.get(
+            "display", "runelite_window", "default_size", default=[773, 534]
+        )
         return tuple(size)
 
     def get_window_target_size(self) -> Tuple[int, int]:
@@ -176,42 +173,46 @@ class MachineConfig:
     def uses_fancyzones(self) -> bool:
         """Check if this machine uses Windows FancyZones for window management."""
         return self.get("display", "fancyzones", "enabled", default=False)
-    
+
     def get_app_dimensions(self) -> Tuple[int, int]:
         """Get OSBC app window dimensions."""
-        width = self.get("app", "width", default=680)
-        height = self.get("app", "height", default=480)
+        width = self.get("app", "width", default=1100)
+        height = self.get("app", "height", default=960)
         return width, height
-    
+
     def get_options_ui_dimensions(self) -> Tuple[int, int]:
         """Get options UI dimensions."""
         width = self.get("options_ui", "width", default=500)
         height = self.get("options_ui", "height", default=400)
         return width, height
-    
+
     def get_ui_coordinates(self, mode: str, element: str) -> Optional[Dict[str, int]]:
         """
         Get UI element coordinates for fixed or resizable mode.
-        
+
         Args:
             mode: "fixed_mode" or "resizable_mode"
             element: Element name (e.g., "minimap", "hp_orb_text")
-            
+
         Returns:
             Dictionary with coordinates or None if not found
         """
         return self.get("ui_coordinates", mode, element)
-    
+
     def get_inventory_config(self) -> Dict[str, int]:
         """Get inventory slot configuration."""
-        return self.get("ui_coordinates", "inventory", default={
-            "slot_width": 36,
-            "slot_height": 36,
-            "gap_x": 6,
-            "gap_y": 4,
-            "start_x": 40,
-            "start_y": 44
-        })
+        return self.get(
+            "ui_coordinates",
+            "inventory",
+            default={
+                "slot_width": 36,
+                "slot_height": 36,
+                "gap_x": 6,
+                "gap_y": 4,
+                "start_x": 40,
+                "start_y": 44,
+            },
+        )
 
     def get_skills_config(self) -> Dict[str, int]:
         """Get skills grid configuration."""
@@ -256,68 +257,92 @@ class MachineConfig:
             "total_level_gap": overrides.get("total_level_gap", gap_y),
         }
         return base
-    
+
     def get_prayers_config(self) -> Dict[str, int]:
         """Get prayers grid configuration."""
-        return self.get("ui_coordinates", "prayers", default={
-            "prayer_width": 33,
-            "prayer_height": 33,
-            "gap_x": 3,
-            "gap_y": 3,
-            "start_x": 30,
-            "start_y": 46
-        })
-    
+        return self.get(
+            "ui_coordinates",
+            "prayers",
+            default={
+                "prayer_width": 33,
+                "prayer_height": 33,
+                "gap_x": 3,
+                "gap_y": 3,
+                "start_x": 30,
+                "start_y": 46,
+            },
+        )
+
     def get_spellbook_config(self) -> Dict[str, int]:
         """Get spellbook configuration."""
-        return self.get("ui_coordinates", "spellbook", default={
-            "spell_width": 23,
-            "spell_height": 23,
-            "gap_x": 4,
-            "gap_y": 2,
-            "start_x": 30,
-            "start_y": 37
-        })
-    
+        return self.get(
+            "ui_coordinates",
+            "spellbook",
+            default={
+                "spell_width": 23,
+                "spell_height": 23,
+                "gap_x": 4,
+                "gap_y": 2,
+                "start_x": 30,
+                "start_y": 37,
+            },
+        )
+
     def get_chat_tabs_config(self) -> Dict[str, Any]:
         """Get chat tabs configuration."""
-        return self.get("ui_coordinates", "chat_tabs", default={
-            "fixed_mode": {
-                "positions": [
-                    [14, 303, 52, 19],  # [x, y, width, height]
-                    [72, 303, 52, 19],
-                    [129, 303, 52, 19],
-                    [188, 303, 52, 19],
-                    [246, 303, 52, 19],
-                    [303, 303, 52, 19],
-                    [361, 303, 52, 28],
-                    [419, 303, 52, 28],
-                    [478, 303, 26, 28]
-                ]
-            }
-        })
-    
+        return self.get(
+            "ui_coordinates",
+            "chat_tabs",
+            default={
+                "fixed_mode": {
+                    "positions": [
+                        [14, 303, 52, 19],  # [x, y, width, height]
+                        [72, 303, 52, 19],
+                        [129, 303, 52, 19],
+                        [188, 303, 52, 19],
+                        [246, 303, 52, 19],
+                        [303, 303, 52, 19],
+                        [361, 303, 52, 28],
+                        [419, 303, 52, 28],
+                        [478, 303, 26, 28],
+                    ]
+                }
+            },
+        )
+
     def get_control_panel_tabs_config(self) -> Dict[str, Any]:
         """Get control panel tabs configuration.
-        
+
         CRITICAL: All positions are RELATIVE to the inv.png template location (control panel origin).
         The inv.png template is searched for and found at runtime, so these must be offsets from that point.
-        
+
         Tab order:
         Top row (0-6): Combat, Skills, Quest, Inventory, Worn Equipment, Prayer, Magic
         Bottom row (7-13): Clan, Friends, Account, Logout, Settings, Emotes, Music
         """
-        return self.get("ui_coordinates", "control_panel_tabs", default={
-            "rows": [
-                # Top row: These positions are relative to control panel (inv.png) top-left corner
-                # Tabs start at x=0 and are spaced ~35px apart
-                {"y": 0, "height": 26, "positions": [0, 36, 72, 108, 144, 180, 216]},
-                # Bottom row: ~28-30px below top row
-                {"y": 28, "height": 28, "positions": [0, 36, 72, 108, 144, 180, 216]}
-            ],
-            "tab_width": 33,
-            "combat_tab": {"width": 33, "x": 0}
-        })
+        return self.get(
+            "ui_coordinates",
+            "control_panel_tabs",
+            default={
+                "rows": [
+                    # Top row: These positions are relative to control panel (inv.png) top-left corner
+                    # Tabs start at x=0 and are spaced ~35px apart
+                    {
+                        "y": 0,
+                        "height": 26,
+                        "positions": [0, 36, 72, 108, 144, 180, 216],
+                    },
+                    # Bottom row: ~28-30px below top row
+                    {
+                        "y": 28,
+                        "height": 28,
+                        "positions": [0, 36, 72, 108, 144, 180, 216],
+                    },
+                ],
+                "tab_width": 33,
+                "combat_tab": {"width": 33, "x": 0},
+            },
+        )
 
     def get_window_zone(self, zone_name: str) -> Optional[Dict[str, Any]]:
         """Get zone bounds for positioning windows.

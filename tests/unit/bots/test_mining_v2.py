@@ -1,10 +1,10 @@
 import os
 
-from model.osrs.mining_v2 import OSRSMiningV2
+from model.osrs.mining import OSRSMining
 
 
 def test_defaults():
-    bot = OSRSMiningV2()
+    bot = OSRSMining()
 
     assert bot.ore_type == "Any"
     assert bot.inventory_mode == "Drop"
@@ -13,7 +13,7 @@ def test_defaults():
 
 
 def test_save_options_updates_fields():
-    bot = OSRSMiningV2()
+    bot = OSRSMining()
 
     options = {
         "running_time": 42,
@@ -36,7 +36,7 @@ def test_save_options_updates_fields():
 
 
 def test_get_ore_template_path():
-    bot = OSRSMiningV2()
+    bot = OSRSMining()
 
     bot.ore_type = "Any"
     assert bot._get_ore_template_path() is None

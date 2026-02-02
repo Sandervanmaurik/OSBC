@@ -13,14 +13,25 @@ class OSRSCombat(OSRSBot, launcher.Launchable):
         bot_title = "Combat"
         description = "This bot kills NPCs. Position your character near some NPCs and highlight them.\nTHIS SCRIPT IS AN EXAMPLE, DO NOT USE LONGTERM."
         super().__init__(bot_title=bot_title, description=description)
-        self.running_time: int = 1
+        self.running_time: int = 60
         self.loot_items: str = ""
         self.hp_threshold: int = 0
 
+        # Enable default options - can be customized via Options button
+        self.options_set = True
+
     def create_options(self):
-        self.options_builder.add_slider_option("running_time", "How long to run (minutes)?", 1, 500)
-        self.options_builder.add_text_edit_option("loot_items", "Loot items (requires re-launch):", "E.g., Coins, Dragon bones")
-        self.options_builder.add_slider_option("hp_threshold", "Low HP threshold (0-100)?", 0, 100)
+        self.options_builder.add_slider_option(
+            "running_time", "How long to run (minutes)?", 1, 500
+        )
+        self.options_builder.add_text_edit_option(
+            "loot_items",
+            "Loot items (requires re-launch):",
+            "E.g., Coins, Dragon bones",
+        )
+        self.options_builder.add_slider_option(
+            "hp_threshold", "Low HP threshold (0-100)?", 0, 100
+        )
 
     def save_options(self, options: dict):
         for option in options:
@@ -32,14 +43,18 @@ class OSRSCombat(OSRSBot, launcher.Launchable):
                 self.hp_threshold = options[option]
             else:
                 self.log_msg(f"Unknown option: {option}")
-                print("Developer: ensure that the option keys are correct, and that options are being unpacked correctly.")
+                print(
+                    "Developer: ensure that the option keys are correct, and that options are being unpacked correctly."
+                )
                 self.options_set = False
                 return
 
         self.log_msg(f"Running time: {self.running_time} minutes.")
-        self.log_msg(f'Loot items: {self.loot_items or "None"}.')
+        self.log_msg(f"Loot items: {self.loot_items or 'None'}.")
         self.log_msg(f"Bot will eat when HP is below: {self.hp_threshold}.")
-        self.log_msg("Options set successfully. Please launch RuneLite with the button on the right to apply settings.")
+        self.log_msg(
+            "Options set successfully. Please launch RuneLite with the button on the right to apply settings."
+        )
 
         self.options_set = True
 
@@ -79,7 +94,9 @@ class OSRSCombat(OSRSBot, launcher.Launchable):
         )
 
     def main_loop(self):
-        self.log_msg("WARNING: This script is for testing and may not be safe for personal use. Please modify it to suit your needs.")
+        self.log_msg(
+            "WARNING: This script is for testing and may not be safe for personal use. Please modify it to suit your needs."
+        )
 
         self.toggle_auto_retaliate(True)
 

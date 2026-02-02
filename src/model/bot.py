@@ -950,19 +950,51 @@ class Bot(ABC):
         # Player is idle if no action text is present
         return action_text.strip() == ""
 
-    def find_item_in_inventory_visual(self, item_template_path: str, confidence: float = 0.8) -> List[int]:
+    def find_item_in_inventory_visual(
+        self,
+        item_template_path: str,
+        confidence: float = 0.8,
+        crop_bottom_portion: float = 0.7,
+    ) -> List[int]:
         """
         Find item in inventory using template matching.
         Args:
             item_template_path: Path to the item template image
             confidence: Matching confidence threshold (0.0-1.0)
+            crop_bottom_portion: Portion of the slot/template height to compare from the bottom (0.0-1.0)
         Returns: List of slot indices (0-27) where the item was found
         """
         found_slots = []
+
+        # Clamp to sensible range; default to full image if invalid.
+        if crop_bottom_portion is None or crop_bottom_portion <= 0 or crop_bottom_portion > 1:
+            crop_bottom_portion = 1.0
+
+        template = cv2.imread(item_template_path, cv2.IMREAD_UNCHANGED)
+        if template is None:
+            raise FileNotFoundError(f"Template not found: {item_template_path}")
+
+        template_cropped = self._crop_bottom_portion(template, crop_bottom_portion)
+
         for i, slot in enumerate(self.win.inventory_slots):
-            if imsearch.search_img_in_rect(item_template_path, slot, confidence=confidence):
+            slot_img = slot.screenshot()
+            slot_cropped = self._crop_bottom_portion(slot_img, crop_bottom_portion)
+            if imsearch.search_img_in_rect(template_cropped, slot_cropped, confidence=confidence):
                 found_slots.append(i)
         return found_slots
+
+    @staticmethod
+    def _crop_bottom_portion(image: cv2.Mat, portion: float) -> cv2.Mat:
+        """
+        Crop the bottom portion of an image by height.
+        """
+        if portion >= 1.0:
+            return image
+        height = image.shape[0]
+        start_y = int(height * (1 - portion))
+        if start_y <= 0:
+            return image
+        return image[start_y:, ...]
 
     # ===== Session Management =====
 

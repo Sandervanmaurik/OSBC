@@ -53,10 +53,13 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         )
         super().__init__(bot_title=bot_title, description=description)
 
-        self.running_time = 180  # minutes
+        self.running_time = 60  # minutes
         self.take_breaks = False
         self.fish_type = "Raw shrimp"
         self.inventory_mode = "Drop"
+
+        # Enable default options - can be customized via Options button
+        self.options_set = True
 
         self._last_camera_move = 0.0
         self._last_random_action = 0.0
@@ -70,10 +73,16 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         self._state = "idle"
 
     def create_options(self) -> None:
-        self.options_builder.add_slider_option("running_time", "How long to run (minutes)?", 1, 500)
+        self.options_builder.add_slider_option(
+            "running_time", "How long to run (minutes)?", 1, 500
+        )
         self.options_builder.add_checkbox_option("take_breaks", "Take breaks?", [" "])
-        self.options_builder.add_dropdown_option("fish_type", "Fish type", self.FISH_TYPES)
-        self.options_builder.add_dropdown_option("inventory_mode", "Inventory handling", self.INVENTORY_MODES)
+        self.options_builder.add_dropdown_option(
+            "fish_type", "Fish type", self.FISH_TYPES
+        )
+        self.options_builder.add_dropdown_option(
+            "inventory_mode", "Inventory handling", self.INVENTORY_MODES
+        )
 
     def save_options(self, options: dict) -> None:
         for option in options:
@@ -200,7 +209,9 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
     def _drop_inventory(self) -> bool:
         template_path = self._get_fish_template_path()
         if template_path is None:
-            self._stop_with_message(f"No template available for fish type '{self.fish_type}'. Stopping.")
+            self._stop_with_message(
+                f"No template available for fish type '{self.fish_type}'. Stopping."
+            )
             return False
 
         slots = self.find_item_in_inventory_visual(template_path, confidence=0.8)
@@ -248,7 +259,9 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                 )
                 time.sleep(rd.truncated_normal_sample(0.01, 0.04, mean=0.02, std=0.008))
                 self.mouse.click()
-                time.sleep(rd.truncated_normal_sample(0.01, 0.03, mean=0.015, std=0.006))
+                time.sleep(
+                    rd.truncated_normal_sample(0.01, 0.03, mean=0.015, std=0.006)
+                )
 
             for pair_start in range(0, total_rows, 2):
                 for col in range(slots_per_row):
@@ -264,7 +277,9 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                         clicked = True
 
                     if clicked:
-                        time.sleep(rd.truncated_normal_sample(0.04, 0.12, mean=0.07, std=0.02))
+                        time.sleep(
+                            rd.truncated_normal_sample(0.04, 0.12, mean=0.07, std=0.02)
+                        )
 
                 time.sleep(rd.truncated_normal_sample(0.06, 0.18, mean=0.1, std=0.03))
         finally:
@@ -357,7 +372,9 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
 
         return self._select_spot_candidate(spots)
 
-    def _select_spot_candidate(self, spots: List[RuneLiteObject]) -> Optional[RuneLiteObject]:
+    def _select_spot_candidate(
+        self, spots: List[RuneLiteObject]
+    ) -> Optional[RuneLiteObject]:
         if not spots:
             return None
         valid = [spot for spot in spots if self._is_valid_spot(spot)]
@@ -384,7 +401,10 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         search_rect = self._spot_search_rect(spot, padding=4)
         if search_rect is None:
             return False
-        return imsearch.search_img_in_rect(template_path, search_rect, confidence=0.7) is not None
+        return (
+            imsearch.search_img_in_rect(template_path, search_rect, confidence=0.7)
+            is not None
+        )
 
     # def _spot_has_shrimp_label(self, spot: RuneLiteObject) -> bool:
     #     self.log_msg("Checking spot label for shrimp...")
@@ -403,7 +423,9 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
     #         self.log_msg(f"Label OCR error: {exc}")
     #     return False
 
-    def _spot_search_rect(self, spot: RuneLiteObject, padding: int = 0) -> Optional[Rectangle]:
+    def _spot_search_rect(
+        self, spot: RuneLiteObject, padding: int = 0
+    ) -> Optional[Rectangle]:
         rect = spot.rect or self.win.game_view
         view = self.win.game_view
 
@@ -475,7 +497,9 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             width, height = x_max - x_min, y_max - y_min
             center = [int(x_min + (width / 2)), int(y_min + (height / 2))]
             axis = np.column_stack((indices[1], indices[0]))
-            spot = RuneLiteObject(x_min, x_max, y_min, y_max, width, height, center, axis)
+            spot = RuneLiteObject(
+                x_min, x_max, y_min, y_max, width, height, center, axis
+            )
             spot.set_rectangle_reference(game_view)
             spots.append(spot)
         return spots
@@ -484,12 +508,17 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         try:
             click_point = target.random_point()
             if random.random() < 0.08:
-                miss = Point(click_point.x + random.randint(-12, 12), click_point.y + random.randint(-12, 12))
+                miss = Point(
+                    click_point.x + random.randint(-12, 12),
+                    click_point.y + random.randint(-12, 12),
+                )
                 self.mouse.move_to(miss, mouseSpeed="fast")
                 self.mouse.click()
                 self._sleep(0.2, 0.6)
 
-            self.mouse.move_to(click_point, mouseSpeed=random.choice(["slow", "medium", "fast"]))
+            self.mouse.move_to(
+                click_point, mouseSpeed=random.choice(["slow", "medium", "fast"])
+            )
             self._sleep(0.1, 0.4)
 
             if not self._is_fish_hover():

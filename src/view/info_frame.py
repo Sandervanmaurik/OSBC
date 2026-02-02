@@ -1,5 +1,4 @@
 import pathlib
-from typing import Dict
 import tkinter
 
 import customtkinter
@@ -7,10 +6,8 @@ from PIL import Image, ImageTk
 from pynput import keyboard
 
 import utilities.settings as settings
-from utilities.osrs_skills import skill_names
 from utilities.game_launcher import Launchable
 from view.fonts.fonts import *
-from utilities.osrs_skills import skill_names
 
 
 class InfoFrame(customtkinter.CTkFrame):
@@ -20,21 +17,23 @@ class InfoFrame(customtkinter.CTkFrame):
     combination_keys = settings.get("keybind") or settings.default_keybind
     status = "stopped"
 
-    def __init__(self, parent, title, info):  # sourcery skip: merge-nested-ifs
+    def __init__(self, parent, title, info):
         """
-        Creates a 5x2 frame with the following widgets:
+        Creates a frame with the following widgets:
             - script title (label)
             - script description (label)
             - script progress bar (progressbar)
             - right-side controls title (label)
             - right-side control buttons (buttons)
+        Note: Skills display has been moved to SkillsFrame in bot_view.py
         """
         super().__init__(parent)
 
         PATH = pathlib.Path(__file__).parent.parent.resolve()
 
+        # Configure grid - removed skills row
         self.rowconfigure((0, 2, 4, 5, 6, 7), weight=0)  # rows will not resize
-        self.rowconfigure((1, 3), weight=1)  # rows will resize
+        self.rowconfigure(1, weight=1)  # description row will resize
         self.columnconfigure(0, weight=1, minsize=200)
         self.columnconfigure(1, weight=0)
 
@@ -48,58 +47,21 @@ class InfoFrame(customtkinter.CTkFrame):
         self.lbl_script_title.grid(column=0, row=0, sticky="wns", padx=20, pady=15)
 
         # -- script description
-        self.lbl_script_desc = customtkinter.CTkLabel(master=self, text=info, font=body_med_font(), justify=tkinter.CENTER)
-        self.lbl_script_desc.grid(column=0, row=2, sticky="nwes", padx=15)
+        self.lbl_script_desc = customtkinter.CTkLabel(
+            master=self, text=info, font=body_med_font(), justify=tkinter.CENTER
+        )
+        self.lbl_script_desc.grid(column=0, row=1, sticky="nwes", padx=15)
         self.lbl_script_desc.bind(
             "<Configure>",
-            lambda e: self.lbl_script_desc.configure(wraplength=self.lbl_script_desc.winfo_width() - 10),
+            lambda e: self.lbl_script_desc.configure(
+                wraplength=self.lbl_script_desc.winfo_width() - 10
+            ),
         )
 
-        # -- skill levels grid (3x8)
-        self.skills_frame = customtkinter.CTkFrame(master=self, fg_color=self._fg_color)
-        self.skills_frame.grid(column=0, row=3, sticky="nwes", padx=15)
-        for r in range(8):
-            self.skills_frame.rowconfigure(r, weight=1)
-        for c in range(3):
-            self.skills_frame.columnconfigure(c, weight=1)
-
-        skills_path = pathlib.Path(__file__).parent.parent.joinpath("images", "bot", "skills")
-        self.skill_images: Dict[str, ImageTk.PhotoImage] = {}
-        icon_size = 22
-        for name in skill_names():
-            icon_file = skills_path / f"{name}.png"
-            if not icon_file.exists():
-                continue
-            icon = Image.open(icon_file).convert("RGBA")
-            icon.thumbnail((icon_size, icon_size), Image.LANCZOS)
-            canvas = Image.new("RGBA", (icon_size, icon_size), (0, 0, 0, 0))
-            offset = ((icon_size - icon.width) // 2, (icon_size - icon.height) // 2)
-            canvas.paste(icon, offset, icon)
-            self.skill_images[name] = ImageTk.PhotoImage(canvas)
-
-        self.skill_value_labels = []
-        for i, name in enumerate(skill_names()):
-            cell = customtkinter.CTkFrame(master=self.skills_frame, fg_color=self._fg_color)
-            cell.grid(row=i // 3, column=i % 3, padx=4, pady=2, sticky="nsew")
-            cell.rowconfigure(0, weight=1)
-            cell.columnconfigure(0, weight=0)
-            cell.columnconfigure(1, weight=1)
-
-            icon = self.skill_images.get(name)
-            icon_label = customtkinter.CTkLabel(master=cell, image=icon, text="")
-            icon_label.grid(row=0, column=0, padx=(2, 4), pady=1, sticky="w")
-
-            value_label = customtkinter.CTkLabel(
-                master=cell,
-                text="--",
-                font=log_font(12),
-                justify=tkinter.LEFT,
-            )
-            value_label.grid(row=0, column=1, padx=(0, 2), pady=1, sticky="w")
-            self.skill_value_labels.append(value_label)
-
         # -- script progress bar
-        self.lbl_progress = customtkinter.CTkLabel(master=self, text="Progress: 0%", font=small_font(), justify=tkinter.CENTER)
+        self.lbl_progress = customtkinter.CTkLabel(
+            master=self, text="Progress: 0%", font=small_font(), justify=tkinter.CENTER
+        )
         self.lbl_progress.grid(row=4, column=0, pady=(15, 0), sticky="ew")
 
         self.progressbar = customtkinter.CTkProgressBar(master=self)
@@ -148,9 +110,16 @@ class InfoFrame(customtkinter.CTkFrame):
             image=self.img_play,
             command=self.play_btn_clicked,
         )
-        self.btn_play.bind("<Enter>", lambda event: self.btn_play.configure(text=f"{settings.keybind_to_text(self.combination_keys)}"))
-        self.btn_play.bind("<Leave>", lambda event: self.btn_play.configure(text="Play"))
-        self.btn_play.grid(row=1, column=0, pady=(0, 15), sticky="nsew")
+        self.btn_play.bind(
+            "<Enter>",
+            lambda event: self.btn_play.configure(
+                text=f"{settings.keybind_to_text(self.combination_keys)}"
+            ),
+        )
+        self.btn_play.bind(
+            "<Leave>", lambda event: self.btn_play.configure(text="Play")
+        )
+        self.btn_play.grid(row=1, column=0, pady=(0, 20), sticky="nsew")
 
         self.btn_stop = customtkinter.CTkButton(
             master=self.btn_frame,
@@ -162,8 +131,15 @@ class InfoFrame(customtkinter.CTkFrame):
             image=self.img_stop,
             command=self.stop_btn_clicked,
         )
-        self.btn_stop.bind("<Enter>", lambda event: self.btn_stop.configure(text=f"{settings.keybind_to_text(self.combination_keys)}"))
-        self.btn_stop.bind("<Leave>", lambda event: self.btn_stop.configure(text="Stop"))
+        self.btn_stop.bind(
+            "<Enter>",
+            lambda event: self.btn_stop.configure(
+                text=f"{settings.keybind_to_text(self.combination_keys)}"
+            ),
+        )
+        self.btn_stop.bind(
+            "<Leave>", lambda event: self.btn_stop.configure(text="Stop")
+        )
 
         self.btn_options = customtkinter.CTkButton(
             master=self.btn_frame,
@@ -188,10 +164,14 @@ class InfoFrame(customtkinter.CTkFrame):
         )
         self.btn_launch.configure(state=tkinter.DISABLED)
 
-        self.lbl_status = customtkinter.CTkLabel(master=self, text="Status: Idle", font=small_font(), justify=tkinter.CENTER)
+        self.lbl_status = customtkinter.CTkLabel(
+            master=self, text="Status: Idle", font=small_font(), justify=tkinter.CENTER
+        )
         self.lbl_status.grid(row=5, column=1, pady=(0, 5), sticky="we")
 
-        self.lbl_state = customtkinter.CTkLabel(master=self, text="State: Idle", font=small_font(), justify=tkinter.CENTER)
+        self.lbl_state = customtkinter.CTkLabel(
+            master=self, text="State: Idle", font=small_font(), justify=tkinter.CENTER
+        )
         self.lbl_state.grid(row=6, column=1, pady=(0, 15), sticky="we")
 
         self.controller = None
@@ -201,13 +181,13 @@ class InfoFrame(customtkinter.CTkFrame):
         self.btn_reload = customtkinter.CTkButton(
             master=self.btn_frame,
             text="Reload Script",
-            font=button_med_font(),
+            font=button_small_font(),
             text_color="white",
             fg_color="#616161",
             hover_color="#4f4f4f",
             command=self.reload_btn_clicked,
         )
-        self.btn_reload.grid(row=4, column=0, pady=15, sticky="nsew")
+        self.btn_reload.grid(row=4, column=0, pady=(5, 10), sticky="nsew")
 
     # ---- Setup ----
     def set_controller(self, controller):
@@ -218,8 +198,6 @@ class InfoFrame(customtkinter.CTkFrame):
         self.lbl_script_desc.configure(text=description)
         self.lbl_status.configure(text="Status: Idle")
         self.lbl_state.configure(text="State: Idle")
-        for lbl in self.skill_value_labels:
-            lbl.configure(text="--")
         if self.controller.model:
             if isinstance(self.controller.model, Launchable):
                 self.btn_launch.grid(row=3, column=0, pady=15, sticky="nsew")
@@ -241,11 +219,15 @@ class InfoFrame(customtkinter.CTkFrame):
         self.btn_launch.configure(state=tkinter.DISABLED)
         window = customtkinter.CTkToplevel(master=self)
         window.title("Options")
-        window.protocol("WM_DELETE_WINDOW", lambda arg=window: self.on_options_closing(arg))
+        window.protocol(
+            "WM_DELETE_WINDOW", lambda arg=window: self.on_options_closing(arg)
+        )
 
         view = self.controller.get_options_view(parent=window)
         view.pack(side="top", fill="both", expand=True, padx=20, pady=20)
-        window.after(100, window.lift)  # Workaround for bug where main window takes focus
+        window.after(
+            100, window.lift
+        )  # Workaround for bug where main window takes focus
 
     def on_options_closing(self, window):
         self.controller.abort_options()
@@ -274,7 +256,10 @@ class InfoFrame(customtkinter.CTkFrame):
 
     def __on_press(self, key):
         self.current_keys.add(key)
-        if all(k in self.current_keys for k in self.combination_keys) and not self.pressed:
+        if (
+            all(k in self.current_keys for k in self.combination_keys)
+            and not self.pressed
+        ):
             self.pressed = True
             if self.status == "running":
                 self.controller.stop()
@@ -333,23 +318,10 @@ class InfoFrame(customtkinter.CTkFrame):
             progress: The progress of the script, a float between 0 and 1.
         """
         self.progressbar.set(progress)
-        self.lbl_progress.configure(text=f"Progress: {progress*100:.0f}%")
+        self.lbl_progress.configure(text=f"Progress: {progress * 100:.0f}%")
 
     def update_state(self, state: str):
         """
         Called from controller. Updates the current bot state label.
         """
         self.lbl_state.configure(text=f"State: {state}")
-
-    def update_skills(self, skill_data):
-        """
-        Called from controller. Updates the skill levels display.
-        """
-        if not isinstance(skill_data, dict):
-            return
-        for idx, name in enumerate(skill_names()):
-            if idx >= len(self.skill_value_labels):
-                break
-            level = skill_data.get(name, -1)
-            text = "?" if level < 0 else str(level)
-            self.skill_value_labels[idx].configure(text=text)

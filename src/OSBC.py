@@ -21,12 +21,14 @@ from view.fonts.fonts import *
 from utilities.machine_config import get_machine_config
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
-customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
+customtkinter.set_default_color_theme(
+    "blue"
+)  # Themes: "blue" (standard), "green", "dark-blue"
 
 
 class App(customtkinter.CTk):
     DEFAULT_GRAY = ("gray50", "gray30")
-    
+
     def __init_dimensions(self):
         """Initialize window dimensions from machine config."""
         config = get_machine_config()
@@ -37,7 +39,9 @@ class App(customtkinter.CTk):
         self.__init_dimensions()
         self.__init_settings()
         if not test:
-            ui_images_path = pathlib.Path(__file__).parent.resolve().joinpath("images", "ui")
+            ui_images_path = (
+                pathlib.Path(__file__).parent.resolve().joinpath("images", "ui")
+            )
             self.img_rocket = ImageTk.PhotoImage(
                 Image.open(ui_images_path.joinpath("rocket.png")).resize((12, 12)),
                 Image.Resampling.LANCZOS,
@@ -54,7 +58,9 @@ class App(customtkinter.CTk):
         self.update()
         self.minsize(self.winfo_width(), self.winfo_height())
 
-        self.protocol("WM_DELETE_WINDOW", self.on_closing)  # call .on_closing() when app gets closed
+        self.protocol(
+            "WM_DELETE_WINDOW", self.on_closing
+        )  # call .on_closing() when app gets closed
 
         # ============ Create Two Frames ============
 
@@ -72,8 +78,12 @@ class App(customtkinter.CTk):
         self.frame_right.grid(row=0, column=1, sticky="nswe", padx=20, pady=20)
 
         # ============ View/Controller Configuration (frame_right) ============
-        self.views: dict[str, customtkinter.CTkFrame] = {}  # A map of all views, keyed by game title
-        self.models: dict[str, Bot] = {}  # A map of all models (bots), keyed by bot title
+        self.views: dict[
+            str, customtkinter.CTkFrame
+        ] = {}  # A map of all views, keyed by game title
+        self.models: dict[
+            str, Bot
+        ] = {}  # A map of all models (bots), keyed by bot title
 
         # Home Views
         self.home_view = TitleView(parent=self.frame_right, main=self)
@@ -102,12 +112,19 @@ class App(customtkinter.CTk):
         self.frame_left.grid_rowconfigure(3, weight=0)  # settings
 
         # Label and dropdown menu inside the scrollable frame
-        self.label_1 = customtkinter.CTkLabel(master=self.frame_left, text="Scripts", font=heading_font())
+        self.label_1 = customtkinter.CTkLabel(
+            master=self.frame_left, text="Scripts", font=heading_font()
+        )
         self.label_1.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
         # Create Scrollable Frame
         # Scrollable frame width could be made configurable if needed
-        self.scrollable_frame_left = customtkinter.CTkScrollableFrame(master=self.frame_left, width=160, fg_color="#2b2b2b", scrollbar_button_color="#333333")
+        self.scrollable_frame_left = customtkinter.CTkScrollableFrame(
+            master=self.frame_left,
+            width=160,
+            fg_color="#2b2b2b",
+            scrollbar_button_color="#333333",
+        )
         self.scrollable_frame_left.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
 
         # ============ Bot/Button Configuration (scrollable_frame_left) ============
@@ -135,19 +152,37 @@ class App(customtkinter.CTk):
         names = dir(module)
         for name in names:
             obj = getattr(module, name)
-            if obj is not Bot and obj is not RuneLiteBot and isinstance(obj, type) and issubclass(obj, Bot):
+            if (
+                obj is not Bot
+                and obj is not RuneLiteBot
+                and isinstance(obj, type)
+                and issubclass(obj, Bot)
+            ):
                 instance = obj()
                 # Make a home view if one doesn't exist
-                if isinstance(instance, RuneLiteBot) and instance.game_title not in self.views:
-                    self.views[instance.game_title] = RuneLiteHomeView(parent=self, main=self, game_title=instance.game_title)
-                elif isinstance(instance, Bot) and instance.game_title not in self.views:
-                    self.views[instance.game_title] = HomeView(parent=self, main=self, game_title=instance.game_title)
+                if (
+                    isinstance(instance, RuneLiteBot)
+                    and instance.game_title not in self.views
+                ):
+                    self.views[instance.game_title] = RuneLiteHomeView(
+                        parent=self, main=self, game_title=instance.game_title
+                    )
+                elif (
+                    isinstance(instance, Bot) and instance.game_title not in self.views
+                ):
+                    self.views[instance.game_title] = HomeView(
+                        parent=self, main=self, game_title=instance.game_title
+                    )
                 # Make a button section if one doesn't exist
                 if instance.game_title not in self.btn_map:
                     self.btn_map[instance.game_title] = []
                 instance.set_controller(self.controller)
                 self.models[name] = instance
-                self.btn_map[instance.game_title].append(self.__create_button(bot_key=name, launchable=isinstance(instance, Launchable)))
+                self.btn_map[instance.game_title].append(
+                    self.__create_button(
+                        bot_key=name, launchable=isinstance(instance, Launchable)
+                    )
+                )
 
         # Configure the dropdown values to be list(self.btn_map.keys())
         self.menu_game_selector.configure(values=list(self.btn_map.keys()))
@@ -169,6 +204,11 @@ class App(customtkinter.CTk):
         self.current_btn: customtkinter.CTkButton = None
         self.current_btn_list: List[customtkinter.CTkButton] = None
 
+        # Auto-select OSRS on startup (must be after status variables are initialized)
+        if "OSRS" in self.btn_map:
+            self.menu_game_selector.set("OSRS")
+            self.__on_game_selector_change("OSRS")
+
     # ============ UI Creation Helpers ============
     def __create_button(self, bot_key: str, launchable: bool = False):
         """
@@ -188,7 +228,11 @@ class App(customtkinter.CTk):
             tooltip = True
         else:
             tooltip = False
-        font = button_small_font() if len(self.models[bot_key].bot_title) > shrink_length else button_med_font()
+        font = (
+            button_small_font()
+            if len(self.models[bot_key].bot_title) > shrink_length
+            else button_med_font()
+        )
 
         btn = customtkinter.CTkButton(
             master=self.scrollable_frame_left,
@@ -200,7 +244,14 @@ class App(customtkinter.CTk):
         )
 
         if tooltip:
-            ToolTip(btn, delay=0.1, font=small_font(), msg=self.models[bot_key].bot_title, bg="#333333", fg="#ffffff")
+            ToolTip(
+                btn,
+                delay=0.1,
+                font=small_font(),
+                msg=self.models[bot_key].bot_title,
+                bg="#333333",
+                fg="#ffffff",
+            )
 
         return btn
 
@@ -234,7 +285,9 @@ class App(customtkinter.CTk):
         window.title("Settings")
         view = SettingsView(parent=window)
         view.pack(side="top", fill="both", expand=True, padx=20, pady=20)
-        window.after(100, window.lift)  # Workaround for bug where main window takes focus
+        window.after(
+            100, window.lift
+        )  # Workaround for bug where main window takes focus
 
     def __on_game_selector_change(self, choice):
         """

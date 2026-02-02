@@ -55,12 +55,15 @@ class OSRSWoodcutter(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         )
         super().__init__(bot_title=bot_title, description=description)
 
-        self.running_time = 180  # minutes
+        self.running_time = 60  # minutes
         self.take_breaks = False
         self.tree_type = "Any"
         self.tree_tag_color_name = self.COLOR_OPTIONS["Pink"]
         self.bank_tag_color_name = self.COLOR_OPTIONS["Green"]
         self.inventory_mode = "Bank (tagged)"
+
+        # Enable default options - can be customized via Options button
+        self.options_set = True
 
         self._last_camera_move = 0.0
         self._last_random_action = 0.0
@@ -71,12 +74,22 @@ class OSRSWoodcutter(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         self._progress_timeout = 90.0
 
     def create_options(self) -> None:
-        self.options_builder.add_slider_option("running_time", "How long to run (minutes)?", 1, 500)
+        self.options_builder.add_slider_option(
+            "running_time", "How long to run (minutes)?", 1, 500
+        )
         self.options_builder.add_checkbox_option("take_breaks", "Take breaks?", [" "])
-        self.options_builder.add_dropdown_option("tree_type", "Tree type", self.TREE_TYPES)
-        self.options_builder.add_dropdown_option("tree_tag_color_name", "Tree tag color", list(self.COLOR_OPTIONS.keys()))
-        self.options_builder.add_dropdown_option("inventory_mode", "Inventory handling", self.INVENTORY_MODES)
-        self.options_builder.add_dropdown_option("bank_tag_color_name", "Bank tag color", list(self.COLOR_OPTIONS.keys()))
+        self.options_builder.add_dropdown_option(
+            "tree_type", "Tree type", self.TREE_TYPES
+        )
+        self.options_builder.add_dropdown_option(
+            "tree_tag_color_name", "Tree tag color", list(self.COLOR_OPTIONS.keys())
+        )
+        self.options_builder.add_dropdown_option(
+            "inventory_mode", "Inventory handling", self.INVENTORY_MODES
+        )
+        self.options_builder.add_dropdown_option(
+            "bank_tag_color_name", "Bank tag color", list(self.COLOR_OPTIONS.keys())
+        )
 
     def save_options(self, options: dict) -> None:
         for option in options:
@@ -139,8 +152,13 @@ class OSRSWoodcutter(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                         bank_failures += 1
                         self.log_msg(f"Inventory handling failed (#{bank_failures})")
                         self._run_recovery("inventory handling failed")
-                        if bank_failures >= 3 and self.inventory_mode == "Bank (tagged)":
-                            self.log_msg("Too many bank failures, falling back to drop this cycle.")
+                        if (
+                            bank_failures >= 3
+                            and self.inventory_mode == "Bank (tagged)"
+                        ):
+                            self.log_msg(
+                                "Too many bank failures, falling back to drop this cycle."
+                            )
                             if not self._drop_inventory():
                                 self.log_msg("Drop fallback failed.")
                             bank_failures = 0
@@ -222,12 +240,11 @@ class OSRSWoodcutter(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         if bankOpen:
             self.log_msg("Bank interface is open, proceeding to deposit.")
             return self._deposit_all_shift_click()
-        
+
         bank = self._find_bank_with_rotation()
         if bank is None:
             self.log_msg("Tagged bank not found.")
             return False
-
 
         self.mouse.move_to(bank.random_point(), mouseSpeed="medium")
         self._sleep(0.2, 0.6)
@@ -288,7 +305,9 @@ class OSRSWoodcutter(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             if bank is not None:
                 return bank
             if attempt < attempts - 1:
-                self.log_msg(f"Bank not found, rotating camera (attempt {attempt + 1}/{attempts})")
+                self.log_msg(
+                    f"Bank not found, rotating camera (attempt {attempt + 1}/{attempts})"
+                )
                 self._rotate_camera_search()
                 self._sleep(0.5, 1.2)
         return None
@@ -302,7 +321,7 @@ class OSRSWoodcutter(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                 return True
             self._sleep(0.12, 0.25)
         return False
-    
+
     def _bank_is_open(self) -> bool:
         return self._bank_interface_visible()
 
@@ -326,12 +345,17 @@ class OSRSWoodcutter(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         try:
             click_point = target.random_point()
             if random.random() < 0.08:
-                miss = Point(click_point.x + random.randint(-12, 12), click_point.y + random.randint(-12, 12))
+                miss = Point(
+                    click_point.x + random.randint(-12, 12),
+                    click_point.y + random.randint(-12, 12),
+                )
                 self.mouse.move_to(miss, mouseSpeed="fast")
                 self.mouse.click()
                 self._sleep(0.2, 0.6)
 
-            self.mouse.move_to(click_point, mouseSpeed=random.choice(["slow", "medium", "fast"]))
+            self.mouse.move_to(
+                click_point, mouseSpeed=random.choice(["slow", "medium", "fast"])
+            )
             self._sleep(0.1, 0.4)
 
             if not self._is_chop_hover():
@@ -383,4 +407,3 @@ class OSRSWoodcutter(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         if self.is_player_doing_action("Woodcutting"):
             return True
         return self._action_text_contains(["Woodcutting", "Chopping"])
-
