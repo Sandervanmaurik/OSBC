@@ -1,5 +1,8 @@
 name: Auto-OSBC
-packages:
+dependencies:
 - name: auto-osbc-multi-agent
   version: 1.0.0
-dev-packages: []
+- name: gh@anthropics/claude-code/plugins/feature-dev
+  url: https://github.com/anthropics/claude-code.git
+  path: plugins/feature-dev
+dev-dependencies: []

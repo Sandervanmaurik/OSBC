@@ -10,27 +10,27 @@ packages:
       AGENTS.md:
         - AGENTS.md
         - CLAUDE.md
-      agents\bot-developer.md:
+      agents/bot-developer.md:
         - .claude/agents/bot-developer.md
         - .cursor/agents/bot-developer.md
         - .factory/droids/bot-developer.md
         - .opencode/agents/bot-developer.md
-      agents\senior-developer.md:
+      agents/senior-developer.md:
         - .claude/agents/senior-developer.md
         - .cursor/agents/senior-developer.md
         - .factory/droids/senior-developer.md
         - .opencode/agents/senior-developer.md
-      agents\test-engineer.md:
+      agents/test-engineer.md:
         - .claude/agents/test-engineer.md
         - .cursor/agents/test-engineer.md
         - .factory/droids/test-engineer.md
         - .opencode/agents/test-engineer.md
-      agents\visual-debugger.md:
+      agents/visual-debugger.md:
         - .claude/agents/visual-debugger.md
         - .cursor/agents/visual-debugger.md
         - .factory/droids/visual-debugger.md
         - .opencode/agents/visual-debugger.md
-      commands\quick-reference.md:
+      commands/quick-reference.md:
         - .claude/commands/quick-reference.md
         - .codex/prompts/quick-reference.md
         - .cursor/commands/quick-reference.md
@@ -38,7 +38,7 @@ packages:
         - .kilocode/workflows/quick-reference.md
         - .opencode/commands/quick-reference.md
         - .roo/commands/quick-reference.md
-      commands\senior-dev-checklist.md:
+      commands/senior-dev-checklist.md:
         - .claude/commands/senior-dev-checklist.md
         - .codex/prompts/senior-dev-checklist.md
         - .cursor/commands/senior-dev-checklist.md
@@ -46,7 +46,7 @@ packages:
         - .kilocode/workflows/senior-dev-checklist.md
         - .opencode/commands/senior-dev-checklist.md
         - .roo/commands/senior-dev-checklist.md
-      skills\bot-creation.md:
+      skills/bot-creation.md:
         - .claude/skills/bot-creation.md
         - .codex/skills/bot-creation.md
         - .cursor/skills/bot-creation.md
@@ -54,7 +54,7 @@ packages:
         - .kilocode/skills/bot-creation.md
         - .opencode/skills/bot-creation.md
         - .roo/skills/bot-creation.md
-      skills\efficient-script-writing.md:
+      skills/efficient-script-writing.md:
         - .claude/skills/efficient-script-writing.md
         - .codex/skills/efficient-script-writing.md
         - .cursor/skills/efficient-script-writing.md
@@ -62,7 +62,7 @@ packages:
         - .kilocode/skills/efficient-script-writing.md
         - .opencode/skills/efficient-script-writing.md
         - .roo/skills/efficient-script-writing.md
-      skills\human-behavior.md:
+      skills/human-behavior.md:
         - .claude/skills/human-behavior.md
         - .codex/skills/human-behavior.md
         - .cursor/skills/human-behavior.md
@@ -70,7 +70,7 @@ packages:
         - .kilocode/skills/human-behavior.md
         - .opencode/skills/human-behavior.md
         - .roo/skills/human-behavior.md
-      skills\senior-dev-principles.md:
+      skills/senior-dev-principles.md:
         - .claude/skills/senior-dev-principles.md
         - .codex/skills/senior-dev-principles.md
         - .cursor/skills/senior-dev-principles.md
@@ -79,4 +79,31 @@ packages:
         - .opencode/skills/senior-dev-principles.md
         - .roo/skills/senior-dev-principles.md
     path: ~/.openpackage/registry/auto-osbc-multi-agent/1.0.0/
+    version: 1.0.0
+  gh@anthropics/claude-code/plugins/feature-dev:
+    files:
+      agents\code-architect.md:
+        - .claude/agents/code-architect.md
+        - .cursor/agents/code-architect.md
+        - .factory/droids/code-architect.md
+        - .opencode/agents/code-architect.md
+      agents\code-explorer.md:
+        - .claude/agents/code-explorer.md
+        - .cursor/agents/code-explorer.md
+        - .factory/droids/code-explorer.md
+        - .opencode/agents/code-explorer.md
+      agents\code-reviewer.md:
+        - .claude/agents/code-reviewer.md
+        - .cursor/agents/code-reviewer.md
+        - .factory/droids/code-reviewer.md
+        - .opencode/agents/code-reviewer.md
+      commands\feature-dev.md:
+        - .claude/commands/feature-dev.md
+        - .codex/prompts/feature-dev.md
+        - .cursor/commands/feature-dev.md
+        - .factory/commands/feature-dev.md
+        - .kilocode/workflows/feature-dev.md
+        - .opencode/commands/feature-dev.md
+        - .roo/commands/feature-dev.md
+    path: ~/.openpackage/cache/git/13d96f6971ff/36d9ee2/plugins/feature-dev
     version: 1.0.0
