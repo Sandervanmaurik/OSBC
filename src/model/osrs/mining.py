@@ -13,6 +13,10 @@ from model.osrs.osrs_bot import OSRSBot
 from utilities.geometry import Point, RuneLiteObject
 from utilities.osrs_bot_utils import OSRSBotBehaviorMixin
 
+# === Import behavior system ===
+from utilities.behavior import BehaviorManager
+from utilities.behavior.profiles import MouseProfile, CameraProfile
+
 
 class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
     """
@@ -64,13 +68,14 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         "Tin": "tin_ore.png",
         "Iron": "iron_ore.png",
     }
-    ORE_MATCH_CONFIDENCE = 0.35
+    ORE_MATCH_CONFIDENCE = 0.1
 
     def __init__(self) -> None:
         bot_title = "Mining"
         description = (
             "Human-like mining with recovery logic. Tag rocks (pink) and banks (green). "
-            "Supports dropping inventory; banking is reserved for a later version."
+            "Supports dropping inventory; banking is reserved for a later version. "
+            "Uses behavior system for natural actions."
         )
         super().__init__(bot_title=bot_title, description=description)
 
@@ -91,6 +96,35 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         self._recovery_stage = 0
         self._idle_timeout = 25.0
         self._progress_timeout = 90.0
+
+        # === Initialize behavior system ===
+        self.behavior = BehaviorManager(
+            bot=self,
+            profile="low-active",  # Balanced for active gameplay
+            mouse_profile=MouseProfile.ACTIVE,
+            camera_profile=CameraProfile.ACTIVE,
+            custom_config={
+                "timing": {
+                    "speed_multiplier": 0.95,  # Slightly faster for mining
+                },
+                "mouse": {
+                    "default_speed": "fast",
+                },
+                "action": {
+                    "misclick_chance": 0.08,  # Match current 8%
+                    "hesitation_chance": 0.10,
+                },
+                "attention": {
+                    "camera_enabled": True,
+                    "skill_check_enabled": True,
+                    "mouse_movement_enabled": True,
+                    "inventory_check_enabled": True,
+                },
+                "breaks": {
+                    "enabled": False,  # Keep custom break logic
+                },
+            },
+        )
 
     def create_options(self) -> None:
         self.options_builder.add_slider_option(
@@ -141,63 +175,56 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         self._reset_random_intervals()
         self._reset_timeouts()
 
+        # === Initialize behavior display ===
+        self.behavior.log_stats_summary(self.log_msg)
+        if hasattr(self, "controller") and self.controller:
+            self.controller.update_behavior_display()
+
+        # Track time for periodic stats logging
+        last_stats_log = time.time()
+        stats_log_interval = 300.0  # 5 minutes
+
         last_action_time = time.time()
         last_progress_time = time.time()
         last_inventory_count = self.count_inventory_items_visual()
         search_failures = 0
 
         with self.timed_session(self.running_time) as session:
-            while session.running:
-                if self._should_stop():
-                    break
+            self.behavior.start_fidgeting(self)
+            try:
+                while session.running:
+                    if self._should_stop():
+                        break
 
-                self._perform_random_behaviors()
-                self._maybe_take_break()
+                    # === Use behavior system for random behaviors ===
+                    self.behavior.attention.perform_random_behaviors()
+                    self._maybe_take_break()
 
-                if self._inventory_is_full():
-                    count = self.count_inventory_items_visual()
-                    self.log_msg(f"Inventory full, handling... (count={count})")
-                    handled = self._handle_inventory_full()
-                    if handled:
-                        last_progress_time = time.time()
-                        last_inventory_count = self.count_inventory_items_visual()
-                        search_failures = 0
-                        self._reset_timeouts()
-                        self._recovery_stage = 0
-                    self._sleep(0.4, 1.2)
-                    continue
+                    # === Periodic stats logging ===
+                    now = time.time()
+                    if now - last_stats_log >= stats_log_interval:
+                        self.behavior.log_stats_summary(self.log_msg)
+                        if hasattr(self, "controller") and self.controller:
+                            stats = self.behavior.get_stats_summary()
+                            self.controller.update_behavior_display(stats=stats)
+                        last_stats_log = now
 
-                if self._is_mining():
-                    last_action_time = time.time()
-                    if not self._wait_while_mining():
-                        self._run_recovery("mining timeout")
-                    else:
-                        new_count = self.count_inventory_items_visual()
-                        if new_count > last_inventory_count:
-                            last_inventory_count = new_count
+                    if self._inventory_is_full():
+                        count = self.count_inventory_items_visual()
+                        self.log_msg(f"Inventory full, handling... (count={count})")
+                        handled = self._handle_inventory_full()
+                        if handled:
                             last_progress_time = time.time()
-                        self._reset_timeouts()
-                        self._recovery_stage = 0
-                    continue
+                            last_inventory_count = self.count_inventory_items_visual()
+                            search_failures = 0
+                            self._reset_timeouts()
+                            self._recovery_stage = 0
+                        # === Use behavior system for sleep ===
+                        self.behavior.timing.sleep((0.4, 1.2))
+                        continue
 
-                target = self._select_rock_target()
-                if target is None:
-                    search_failures += 1
-                    self.log_msg(f"No tagged rocks found (#{search_failures})")
-                    if search_failures >= 3:
-                        self._run_recovery("no rocks found")
-                        search_failures = 0
-                    self._sleep(0.5, 1.4)
-                    if self._check_stuck(last_action_time, last_progress_time):
+                    if self._is_mining():
                         last_action_time = time.time()
-                        last_progress_time = time.time()
-                    continue
-
-                search_failures = 0
-                if self._attempt_mine(target):
-                    if self._wait_for_mine_start():
-                        last_action_time = time.time()
-                        session.increment("rocks_clicked")
                         if not self._wait_while_mining():
                             self._run_recovery("mining timeout")
                         else:
@@ -207,14 +234,47 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                                 last_progress_time = time.time()
                             self._reset_timeouts()
                             self._recovery_stage = 0
-                    else:
-                        self._run_recovery("mine did not start")
-                else:
-                    self._sleep(0.2, 0.9)
+                        continue
 
-                if self._check_stuck(last_action_time, last_progress_time):
-                    last_action_time = time.time()
-                    last_progress_time = time.time()
+                    target = self._select_rock_target()
+                    if target is None:
+                        search_failures += 1
+                        self.log_msg(f"No tagged rocks found (#{search_failures})")
+                        if search_failures >= 3:
+                            self._run_recovery("no rocks found")
+                            search_failures = 0
+                        # === Use behavior system for sleep ===
+                        self.behavior.timing.sleep((0.5, 1.4))
+                        if self._check_stuck(last_action_time, last_progress_time):
+                            last_action_time = time.time()
+                            last_progress_time = time.time()
+                        continue
+
+                    search_failures = 0
+                    if self._attempt_mine(target):
+                        if self._wait_for_mine_start():
+                            last_action_time = time.time()
+                            session.increment("rocks_clicked")
+                            if not self._wait_while_mining():
+                                self._run_recovery("mining timeout")
+                            else:
+                                new_count = self.count_inventory_items_visual()
+                                if new_count > last_inventory_count:
+                                    last_inventory_count = new_count
+                                    last_progress_time = time.time()
+                                self._reset_timeouts()
+                                self._recovery_stage = 0
+                        else:
+                            self._run_recovery("mine did not start")
+                    else:
+                        # === Use behavior system for sleep ===
+                        self.behavior.timing.sleep((0.2, 0.9))
+
+                    if self._check_stuck(last_action_time, last_progress_time):
+                        last_action_time = time.time()
+                        last_progress_time = time.time()
+            finally:
+                self.behavior.stop_fidgeting()
 
         self.log_msg("Mining session complete.")
 
@@ -249,8 +309,14 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         all_slots = sorted({slot for slots in slots_by_ore.values() for slot in slots})
         ores = ", ".join(slots_by_ore.keys())
         self.log_msg(f"Dropping ore ({ores}) from slots: {all_slots}")
-        self.drop(all_slots)
-        self._sleep(0.4, 1.0)
+        # === Pause fidgeting during drop to prevent mouse stuttering ===
+        self.behavior.pause_fidgeting()
+        try:
+            self.drop(all_slots)
+        finally:
+            self.behavior.resume_fidgeting()
+        # === Use behavior system for sleep ===
+        self.behavior.timing.sleep((0.4, 1.0))
 
         remaining = self.count_inventory_items_visual()
         if self.is_inventory_full_visual():
@@ -281,8 +347,14 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             return False
 
         self.log_msg(f"Dropping {self.ore_type} ore from slots: {slots}")
-        self.drop(slots)
-        self._sleep(0.4, 1.0)
+        # === Pause fidgeting during drop to prevent mouse stuttering ===
+        self.behavior.pause_fidgeting()
+        try:
+            self.drop(slots)
+        finally:
+            self.behavior.resume_fidgeting()
+        # === Use behavior system for sleep ===
+        self.behavior.timing.sleep((0.4, 1.0))
 
         remaining = self.count_inventory_items_visual()
         if self.is_inventory_full_visual():
@@ -352,25 +424,24 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
     def _attempt_mine(self, target: RuneLiteObject) -> bool:
         try:
             click_point = target.random_point()
-            if random.random() < 0.08:
-                miss = Point(
-                    click_point.x + random.randint(-12, 12),
-                    click_point.y + random.randint(-12, 12),
-                )
-                self.mouse.move_to(miss, mouseSpeed="fast")
-                self.mouse.click()
-                self._sleep(0.2, 0.6)
+            # === Use behavior system for misclick simulation ===
+            if self.behavior.action.should_misclick():
+                self.behavior.action.execute_misclick(target)
 
-            self.mouse.move_to(
-                click_point, mouseSpeed=random.choice(["slow", "medium", "fast"])
+            # === Use behavior system for mouse movement ===
+            self.behavior.mouse.move_to(
+                click_point, mouseSpeed=random.choice(["fast", "fastest", "fastest"])
             )
-            self._sleep(0.1, 0.4)
+            # === Use behavior system for sleep ===
+            self.behavior.timing.sleep((0.1, 0.4))
 
             if not self._is_mine_hover():
                 return False
 
-            self.mouse.click()
-            self._sleep(0.2, 0.6)
+            # === Use behavior system for clicking ===
+            self.behavior.mouse.click()
+            # === Use behavior system for sleep ===
+            self.behavior.timing.sleep((0.2, 0.6))
             return True
         except Exception as exc:
             self.log_msg(f"Mine attempt error: {exc}")
@@ -393,7 +464,8 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                 return False
             if self._is_mining():
                 return True
-            self._sleep(0.08, 0.25)
+            # === Use behavior system for sleep ===
+            self.behavior.timing.sleep((0.08, 0.25))
         self._log_action_text_debug("mine_start_timeout")
         return False
 
@@ -408,7 +480,8 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                 return False
             if random.random() < 0.12:
                 self._micro_behavior_during_action()
-            self._sleep(0.2, 0.6)
+            # === Use behavior system for sleep ===
+            self.behavior.timing.sleep((0.2, 0.6))
         return True
 
     def _is_mining(self) -> bool:

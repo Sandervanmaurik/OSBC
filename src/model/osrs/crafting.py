@@ -13,6 +13,7 @@ from utilities.window import BankDetectionError
 
 # === Import behavior system ===
 from utilities.behavior import BehaviorManager
+from utilities.behavior.profiles import MouseProfile, CameraProfile
 
 
 class OSRSCrafting(OSRSBot):
@@ -74,10 +75,12 @@ class OSRSCrafting(OSRSBot):
         self._cutting_end_timeout = 55.0
 
         # === Initialize behavior system ===
-        # Ultra-minimal camera for bank-standing
+        # Bank-standing profiles: minimal camera, frequent mouse fidgeting
         self.behavior = BehaviorManager(
             bot=self,
             profile="high-active",  # Fast, efficient profile
+            mouse_profile=MouseProfile.BANK_STANDING,
+            camera_profile=CameraProfile.BANK_STANDING,
             custom_config={
                 "timing": {
                     "speed_multiplier": 0.9,  # Slightly slower than fletching
@@ -90,13 +93,7 @@ class OSRSCrafting(OSRSBot):
                     "hesitation_chance": 0.08,
                 },
                 "attention": {
-                    # Ultra-minimal for bank-standing
-                    "camera_enabled": True,
-                    "camera_interval": (60.0, 1200.0),  # 1-20 minutes
-                    "camera_movement_magnitude": 0.3,  # Small movements
                     "skill_check_enabled": False,
-                    "mouse_movement_enabled": True,
-                    "mouse_movement_interval": (60.0, 180.0),
                     "inventory_check_enabled": False,
                 },
                 "breaks": {
@@ -159,45 +156,53 @@ class OSRSCrafting(OSRSBot):
         stats_log_interval = 30  # 30 seconds
 
         with self.timed_session(self.running_time) as session:
-            while session.running:
-                if self._should_stop():
-                    break
+            self.behavior.start_fidgeting(self)
+            try:
+                while session.running:
+                    if self._should_stop():
+                        break
 
-                # === Ultra-minimal attention behaviors ===
-                self.behavior.attention.perform_random_behaviors()
+                    # === Ultra-minimal attention behaviors ===
+                    self.behavior.attention.perform_random_behaviors()
 
-                # === Periodic stats logging (every 5 minutes) ===
-                now = time.time()
-                if now - last_stats_log >= stats_log_interval:
-                    self.behavior.log_stats_summary(self.log_msg)
-                    if hasattr(self, "controller") and self.controller:
-                        stats = self.behavior.get_stats_summary()
-                        self.controller.update_behavior_display(stats=stats)
-                    last_stats_log = now
+                    # === Periodic stats logging (every 5 minutes) ===
+                    now = time.time()
+                    if now - last_stats_log >= stats_log_interval:
+                        self.behavior.log_stats_summary(self.log_msg)
+                        if hasattr(self, "controller") and self.controller:
+                            stats = self.behavior.get_stats_summary()
+                            self.controller.update_behavior_display(stats=stats)
+                        last_stats_log = now
 
-                # State machine
-                if self.crafting_method == "Cutting gems":
-                    # Build templates dynamically based on gem type
-                    template_builder = self.ITEM_TEMPLATES.get(self.crafting_method)
-                    if not template_builder:
+                    # State machine
+                    if self.crafting_method == "Cutting gems":
+                        # Build templates dynamically based on gem type
+                        template_builder = self.ITEM_TEMPLATES.get(self.crafting_method)
+                        if not template_builder:
+                            self._stop_with_message(
+                                f"No templates defined for method: {self.crafting_method}"
+                            )
+                            break
+
+                        tool_tmpl, input_tmpl, output_tmpl = template_builder(
+                            self.gem_type
+                        )
+
+                        if not self._cutting_gems_cycle(
+                            tool_tmpl, input_tmpl, output_tmpl
+                        ):
+                            # === Use behavior system for sleep ===
+                            self.behavior.timing.sleep((0.15, 0.4))
+                            continue
+                    else:
                         self._stop_with_message(
-                            f"No templates defined for method: {self.crafting_method}"
+                            f"Unsupported method: {self.crafting_method}"
                         )
                         break
 
-                    tool_tmpl, input_tmpl, output_tmpl = template_builder(self.gem_type)
-
-                    if not self._cutting_gems_cycle(tool_tmpl, input_tmpl, output_tmpl):
-                        # === Use behavior system for sleep ===
-                        self.behavior.timing.sleep((0.15, 0.4))
-                        continue
-                else:
-                    self._stop_with_message(
-                        f"Unsupported method: {self.crafting_method}"
-                    )
-                    break
-
-                session.increment("cycles")
+                    session.increment("cycles")
+            finally:
+                self.behavior.stop_fidgeting()
 
         self.log_msg("Crafting session complete.")
         if self.status == BotStatus.RUNNING:

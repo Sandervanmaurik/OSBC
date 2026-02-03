@@ -1,10 +1,20 @@
 """Behavior manager for orchestrating all behavior modules."""
 
 import time
+import random
+import threading
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Any, Optional
 
 from utilities.behavior.profiles import BehaviorProfiles
+from utilities.behavior.profiles import (
+    MouseProfile,
+    CameraProfile,
+    MOUSE_PROFILES,
+    CAMERA_PROFILES,
+    MouseProfileConfig,
+    CameraProfileConfig,
+)
 from utilities.behavior.modules import (
     TimingBehavior,
     MouseBehavior,
@@ -60,6 +70,8 @@ class BehaviorManager:
         self,
         bot: "Bot",
         profile: str = "experienced",
+        mouse_profile: Optional[MouseProfile] = None,
+        camera_profile: Optional[CameraProfile] = None,
         custom_config: Optional[Dict[str, Any]] = None,
     ):
         """
@@ -68,6 +80,8 @@ class BehaviorManager:
         Args:
             bot: The bot instance that will use these behaviors
             profile: Profile name ("cautious", "experienced", "focused")
+            mouse_profile: Optional mouse activity profile
+            camera_profile: Optional camera movement profile
             custom_config: Optional dict to override profile settings
                           Format: {"timing": {...}, "mouse": {...}, etc.}
 
@@ -84,9 +98,29 @@ class BehaviorManager:
                     "attention": {"camera_enabled": False}
                 }
             )
+
+            # Use activity profiles
+            manager = BehaviorManager(
+                bot,
+                profile="high-active",
+                mouse_profile=MouseProfile.BANK_STANDING,
+                camera_profile=CameraProfile.BANK_STANDING,
+            )
         """
         self.bot = bot
         self.profile_name = profile
+
+        # Store mouse and camera profiles
+        self.mouse_profile = mouse_profile or MouseProfile.ACTIVE
+        self.camera_profile = camera_profile or CameraProfile.ACTIVE
+        self.mouse_config = MOUSE_PROFILES[self.mouse_profile]
+        self.camera_config = CAMERA_PROFILES[self.camera_profile]
+
+        # Fidget thread state
+        self._fidget_thread = None
+        self._fidget_stop_event = None
+        self._fidget_paused = False  # Pause during actions
+        self._fidget_started = False
 
         # Load profile configuration
         profile_config = BehaviorProfiles.get(profile)
@@ -360,3 +394,150 @@ class BehaviorManager:
             f"Behavior stats ({duration_min:.1f}min): "
             f"Camera={camera}, Mouse={mouse}, Skills={skill}, Inventory={inventory}"
         )
+
+    def get_camera_config(self) -> CameraProfileConfig:
+        """
+        Get camera configuration from profile.
+
+        Returns:
+            CameraProfileConfig instance
+        """
+        return self.camera_config
+
+    def start_fidgeting(self, bot) -> None:
+        """
+        Start continuous mouse fidgeting in background thread.
+
+        Args:
+            bot: Bot instance for mouse control and game window access
+        """
+        if not self.mouse_config.fidget_enabled:
+            self.bot.log_msg("Mouse fidgeting disabled for this profile")
+            return
+
+        if self._fidget_started:
+            return  # Already running
+
+        # Random startup delay (1-5s) to feel more natural
+        startup_delay = random.uniform(1.0, 5.0)
+        time.sleep(startup_delay)
+
+        self._fidget_stop_event = threading.Event()
+        self._fidget_thread = threading.Thread(
+            target=self._fidget_loop, args=(bot,), daemon=True, name="MouseFidget"
+        )
+        self._fidget_thread.start()
+        self._fidget_started = True
+        self.bot.log_msg(
+            f"Mouse fidgeting started (profile: {self.mouse_profile.value})"
+        )
+
+    def stop_fidgeting(self) -> None:
+        """Stop the fidgeting background thread cleanly."""
+        if not self._fidget_started:
+            return
+
+        if self._fidget_stop_event:
+            self._fidget_stop_event.set()
+
+        if self._fidget_thread and self._fidget_thread.is_alive():
+            self._fidget_thread.join(timeout=2.0)
+
+        self._fidget_started = False
+        self.bot.log_msg("Mouse fidgeting stopped")
+
+    def pause_fidgeting(self) -> None:
+        """
+        Temporarily pause fidgeting during critical actions.
+        Call this before clicking, moving, or performing actions.
+        """
+        self._fidget_paused = True
+
+    def resume_fidgeting(self) -> None:
+        """Resume fidgeting after critical actions are complete."""
+        self._fidget_paused = False
+
+    def _fidget_loop(self, bot) -> None:
+        """
+        Background loop for continuous mouse fidgeting.
+        Runs until stop_fidgeting() is called.
+        Pauses when _fidget_paused is True.
+        """
+        import utilities.random_util as rd
+
+        while not self._fidget_stop_event.is_set():
+            # Generate random interval from profile range
+            min_interval, max_interval = self.mouse_config.fidget_interval_range
+            interval = rd.truncated_normal_sample(
+                min_interval,
+                max_interval,
+                mean=(min_interval + max_interval) / 2,
+                std=(max_interval - min_interval) / 6,
+            )
+
+            # Sleep in 0.5s chunks to be responsive to stop event
+            slept = 0.0
+            while slept < interval and not self._fidget_stop_event.is_set():
+                time.sleep(0.5)
+                slept += 0.5
+
+            if self._fidget_stop_event.is_set():
+                break
+
+            # Only perform fidget if not paused
+            if not self._fidget_paused:
+                self._perform_fidget(bot)
+
+    def _perform_fidget(self, bot) -> None:
+        """
+        Perform a single smooth mouse movement to a random point.
+        Movement stays within game window bounds and uses varying speeds.
+        """
+        try:
+            # Get game window bounds
+            if not bot.win or not bot.win.game_view:
+                return
+
+            game_view = bot.win.game_view
+
+            # Pick a random point within the game view
+            target_point = game_view.random_point()
+
+            # Vary the speed based on profile
+            # Bank-standing: slower, more deliberate
+            # Active/High-Active: faster movements
+            speed_options = ["medium", "fast", "fastest"]
+
+            # Weight speeds based on profile
+            if self.mouse_profile.value == "bank_standing":
+                # Prefer slower speeds for bank-standing
+                speed = random.choices(
+                    speed_options,
+                    weights=[0.5, 0.35, 0.15],  # 50% medium, 35% fast, 15% fastest
+                    k=1,
+                )[0]
+            elif self.mouse_profile.value in ["active", "low_active"]:
+                # Balanced speeds
+                speed = random.choices(
+                    speed_options,
+                    weights=[0.3, 0.4, 0.3],  # 30% medium, 40% fast, 30% fastest
+                    k=1,
+                )[0]
+            else:  # high_active, afk
+                # Prefer faster speeds
+                speed = random.choices(
+                    speed_options,
+                    weights=[0.15, 0.35, 0.5],  # 15% medium, 35% fast, 50% fastest
+                    k=1,
+                )[0]
+
+            # Move mouse smoothly (no click)
+            bot.mouse.move_to(
+                target_point,
+                mouseSpeed=speed,
+                knotsCount=random.choice([1, 2]),  # Vary path complexity
+            )
+
+        except Exception as exc:
+            # Don't crash the fidget thread - silently continue
+            pass

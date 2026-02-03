@@ -1,6 +1,146 @@
-"""Predefined behavior profiles."""
+"""
+Behavior profiles for mouse and camera movement.
 
-from typing import Dict, Any
+Defines activity profiles that control mouse fidgeting behavior and
+camera movement patterns independently.
+"""
+
+from enum import Enum
+from dataclasses import dataclass
+from typing import Tuple, Dict, Any
+import copy
+
+
+class MouseProfile(Enum):
+    """Mouse activity behavior profiles."""
+
+    BANK_STANDING = "bank_standing"
+    LOW_ACTIVE = "low_active"
+    ACTIVE = "active"
+    HIGH_ACTIVE = "high_active"
+    AFK = "afk"
+
+
+class CameraProfile(Enum):
+    """Camera movement behavior profiles."""
+
+    BANK_STANDING = "bank_standing"
+    LOW_ACTIVE = "low_active"
+    ACTIVE = "active"
+    HIGH_ACTIVE = "high_active"
+    AFK = "afk"
+
+
+@dataclass
+class MouseProfileConfig:
+    """Configuration for mouse behavior."""
+
+    fidget_enabled: bool
+    fidget_interval_range: Tuple[float, float]  # seconds (min, max)
+    fidget_distance_range: Tuple[int, int]  # pixels (min, max)
+    click_delay_multiplier: float  # multiply base delays
+    misclick_chance: float  # 0.0 to 1.0
+
+
+@dataclass
+class CameraProfileConfig:
+    """Configuration for camera behavior."""
+
+    enabled: bool
+    interval_range: Tuple[float, float]  # seconds (min, max)
+    horizontal_range: Tuple[int, int]  # degrees
+    vertical_range: Tuple[int, int]  # degrees
+    vertical_chance: float  # 0.0 to 1.0
+
+
+# Mouse activity profiles
+MOUSE_PROFILES = {
+    MouseProfile.BANK_STANDING: MouseProfileConfig(
+        fidget_enabled=True,
+        fidget_interval_range=(1.0, 15.0),  # Continuous subtle movements
+        fidget_distance_range=(10, 28),  # small
+        click_delay_multiplier=1.2,  # Slightly slower reactions
+        misclick_chance=0.01,
+    ),
+    MouseProfile.LOW_ACTIVE: MouseProfileConfig(
+        fidget_enabled=True,
+        fidget_interval_range=(10.0, 20.0),  # Slower fidgeting
+        fidget_distance_range=(10, 28),  # Small movements
+        click_delay_multiplier=1.5,  # Slower reactions
+        misclick_chance=0.02,
+    ),
+    MouseProfile.ACTIVE: MouseProfileConfig(
+        fidget_enabled=True,
+        fidget_interval_range=(5.0, 15.0),  # Regular fidgeting
+        fidget_distance_range=(10, 50),  # Medium movements
+        click_delay_multiplier=1.0,  # Normal speed
+        misclick_chance=0.03,
+    ),
+    MouseProfile.HIGH_ACTIVE: MouseProfileConfig(
+        fidget_enabled=True,
+        fidget_interval_range=(3.0, 8.0),  # Very frequent fidgeting
+        fidget_distance_range=(15, 50),  # Larger movements
+        click_delay_multiplier=0.8,  # Faster reactions
+        misclick_chance=0.05,
+    ),
+    MouseProfile.AFK: MouseProfileConfig(
+        fidget_enabled=True,
+        fidget_interval_range=(30.0, 90.0),  # Very slow fidgeting
+        fidget_distance_range=(5, 20),  # Small movements
+        click_delay_multiplier=2.0,  # Much slower reactions
+        misclick_chance=0.01,
+    ),
+}
+
+
+# Camera movement profiles
+CAMERA_PROFILES = {
+    CameraProfile.BANK_STANDING: CameraProfileConfig(
+        enabled=False,  # No camera movement
+        interval_range=(60.0, 1200.0),  # Not used when disabled
+        horizontal_range=(0, 0),  # Not used when disabled
+        vertical_range=(0, 0),  # Not used when disabled
+        vertical_chance=0.0,  # Not used when disabled
+    ),
+    CameraProfile.LOW_ACTIVE: CameraProfileConfig(
+        enabled=True,
+        interval_range=(25.0, 70.0),  # Rare adjustments
+        horizontal_range=(-120, 120),
+        vertical_range=(-20, 20),
+        vertical_chance=0.35,
+    ),
+    CameraProfile.ACTIVE: CameraProfileConfig(
+        enabled=True,
+        interval_range=(30.0, 90.0),  # Occasional adjustments
+        horizontal_range=(-120, 120),
+        vertical_range=(-20, 20),
+        vertical_chance=0.3,
+    ),
+    CameraProfile.HIGH_ACTIVE: CameraProfileConfig(
+        enabled=True,
+        interval_range=(45.0, 120.0),  # Frequent adjustments
+        horizontal_range=(-90, 90),
+        vertical_range=(-15, 15),
+        vertical_chance=0.2,
+    ),
+    CameraProfile.AFK: CameraProfileConfig(
+        enabled=True,
+        interval_range=(120.0, 300.0),  # Very rare (2-5 minutes)
+        horizontal_range=(-120, 120),
+        vertical_range=(-20, 20),
+        vertical_chance=0.4,
+    ),
+}
+
+
+# ======================================================================
+# Backward Compatibility: Old BehaviorProfiles Class
+# ======================================================================
+# This class provides the original behavior profile system for timing,
+# mouse, action, attention, and breaks configuration. It's kept for
+# backward compatibility with existing bots that don't use the new
+# MouseProfile/CameraProfile system yet.
+# ======================================================================
 
 
 class BehaviorProfiles:
@@ -232,8 +372,6 @@ class BehaviorProfiles:
             )
 
         # Return a copy to avoid mutations
-        import copy
-
         return copy.deepcopy(profile_map[key])
 
     @classmethod

@@ -65,24 +65,40 @@ class MouseBehavior(BaseBehaviorModule):
         if not self.enabled:
             return
 
-        # Convert to tuple if Point object
-        if isinstance(destination, Point):
-            destination = (destination.x, destination.y)
+        # Pause fidgeting during mouse movement
+        if hasattr(self.bot, "behavior") and hasattr(
+            self.bot.behavior, "pause_fidgeting"
+        ):
+            self.bot.behavior.pause_fidgeting()
 
-        # Merge profile defaults with overrides
-        move_kwargs = {
-            "mouseSpeed": mouseSpeed or self.config.get("default_speed", "fast"),
-        }
+        try:
+            # Convert to tuple if Point object
+            if isinstance(destination, Point):
+                destination = (destination.x, destination.y)
 
-        # Add optional default knots if configured
-        if "knotsCount" not in kwargs and self.config.get("default_knots") is not None:
-            move_kwargs["knotsCount"] = self.config.get("default_knots")
+            # Merge profile defaults with overrides
+            move_kwargs = {
+                "mouseSpeed": mouseSpeed or self.config.get("default_speed", "fast"),
+            }
 
-        # Merge with any additional overrides
-        move_kwargs.update(kwargs)
+            # Add optional default knots if configured
+            if (
+                "knotsCount" not in kwargs
+                and self.config.get("default_knots") is not None
+            ):
+                move_kwargs["knotsCount"] = self.config.get("default_knots")
 
-        # Use bot's mouse
-        self.bot.mouse.move_to(destination, **move_kwargs)
+            # Merge with any additional overrides
+            move_kwargs.update(kwargs)
+
+            # Use bot's mouse
+            self.bot.mouse.move_to(destination, **move_kwargs)
+        finally:
+            # Resume fidgeting after movement
+            if hasattr(self.bot, "behavior") and hasattr(
+                self.bot.behavior, "resume_fidgeting"
+            ):
+                self.bot.behavior.resume_fidgeting()
 
     def move_rel(
         self, x: int, y: int, x_var: int = 0, y_var: int = 0, **kwargs
@@ -125,7 +141,20 @@ class MouseBehavior(BaseBehaviorModule):
         if not self.enabled:
             return
 
-        self.bot.mouse.click(button=button, force_delay=force_delay, **kwargs)
+        # Pause fidgeting during click
+        if hasattr(self.bot, "behavior") and hasattr(
+            self.bot.behavior, "pause_fidgeting"
+        ):
+            self.bot.behavior.pause_fidgeting()
+
+        try:
+            self.bot.mouse.click(button=button, force_delay=force_delay, **kwargs)
+        finally:
+            # Resume fidgeting after click
+            if hasattr(self.bot, "behavior") and hasattr(
+                self.bot.behavior, "resume_fidgeting"
+            ):
+                self.bot.behavior.resume_fidgeting()
 
     def right_click(self, force_delay: bool = False) -> None:
         """

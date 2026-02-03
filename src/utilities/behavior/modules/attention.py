@@ -34,11 +34,23 @@ class AttentionBehavior(BaseBehaviorModule):
         self._last_mouse_movement = time.time()
         self._last_inventory_check = time.time()
 
-        # Generate intervals
-        self._camera_interval = self._random_interval("camera")
+        # Generate intervals (camera interval is lazy-initialized)
+        self._camera_interval = None  # Will be set on first access
         self._skill_interval = self._random_interval("skill_check")
         self._mouse_interval = self._random_interval("mouse_movement")
         self._inventory_interval = self._random_interval("inventory_check")
+
+    def _random_camera_interval(self) -> float:
+        """Generate random camera interval from profile config."""
+        import utilities.random_util as rd
+
+        # Get camera config from BehaviorManager
+        camera_cfg = self.bot.behavior.get_camera_config()
+        min_int, max_int = camera_cfg.interval_range
+
+        return rd.truncated_normal_sample(
+            min_int, max_int, mean=(min_int + max_int) / 2, std=(max_int - min_int) / 6
+        )
 
     def get_default_config(self) -> Dict[str, Any]:
         """Return default attention configuration."""
@@ -93,14 +105,19 @@ class AttentionBehavior(BaseBehaviorModule):
 
         now = time.time()
 
-        # Camera movement
-        if self.config.get("camera_enabled", True):
+        # Camera movement (using profile)
+        camera_cfg = self.bot.behavior.get_camera_config()
+        if camera_cfg.enabled:
+            # Lazy-initialize camera interval on first use
+            if self._camera_interval is None:
+                self._camera_interval = self._random_camera_interval()
+
             if now - self._last_camera_move >= self._camera_interval:
                 if random.random() < 0.7:  # Don't always move camera
                     self.random_camera_movement()
                     self.bot.behavior.increment_stat("camera")
                 self._last_camera_move = now
-                self._camera_interval = self._random_interval("camera")
+                self._camera_interval = self._random_camera_interval()
 
         # Skill check
         if self.config.get("skill_check_enabled", True):
@@ -128,21 +145,28 @@ class AttentionBehavior(BaseBehaviorModule):
 
     def random_camera_movement(self) -> None:
         """
-        Perform random camera movement.
+        Perform random camera movement using profile configuration.
 
         Rotates camera horizontally and sometimes vertically to simulate
         looking around.
         """
-        if not self.enabled or not self.config.get("camera_enabled", True):
+        if not self.enabled:
+            return
+
+        # Get camera config from BehaviorManager
+        camera_cfg = self.bot.behavior.get_camera_config()
+        if not camera_cfg.enabled:
             return
 
         try:
-            h_range = self.config.get("camera_horizontal_range", (-120, 120))
+            # Use profile horizontal range
+            h_range = camera_cfg.horizontal_range
             horizontal = random.randint(h_range[0], h_range[1])
 
+            # Use profile vertical settings
             vertical = 0
-            if random.random() < self.config.get("camera_vertical_chance", 0.3):
-                v_range = self.config.get("camera_vertical_range", (-20, 20))
+            if random.random() < camera_cfg.vertical_chance:
+                v_range = camera_cfg.vertical_range
                 vertical = random.randint(v_range[0], v_range[1])
 
             if horizontal == 0 and vertical == 0:

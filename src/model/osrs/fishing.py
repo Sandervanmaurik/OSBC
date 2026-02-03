@@ -16,6 +16,10 @@ from model.osrs.osrs_bot import OSRSBot
 from utilities.geometry import Point, Rectangle, RuneLiteObject
 from utilities.osrs_bot_utils import OSRSBotBehaviorMixin
 
+# === Import behavior system ===
+from utilities.behavior import BehaviorManager
+from utilities.behavior.profiles import MouseProfile, CameraProfile
+
 
 class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
     """
@@ -49,7 +53,7 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         bot_title = "Fishing"
         description = (
             "Human-like fishing using light blue fishing spot tiles. "
-            "Supports dropping raw shrimp."
+            "Supports dropping raw shrimp. Uses behavior system for natural actions."
         )
         super().__init__(bot_title=bot_title, description=description)
 
@@ -71,6 +75,35 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         self._last_offscreen_time = 0.0
         self._offscreen_interval = 0.0
         self._state = "idle"
+
+        # === Initialize behavior system ===
+        self.behavior = BehaviorManager(
+            bot=self,
+            profile="low-active",  # Balanced for active gameplay
+            mouse_profile=MouseProfile.ACTIVE,
+            camera_profile=CameraProfile.ACTIVE,
+            custom_config={
+                "timing": {
+                    "speed_multiplier": 1.0,  # Normal speed for fishing
+                },
+                "mouse": {
+                    "default_speed": "fast",
+                },
+                "action": {
+                    "misclick_chance": 0.08,  # Match current 8%
+                    "hesitation_chance": 0.10,
+                },
+                "attention": {
+                    "camera_enabled": True,
+                    "skill_check_enabled": True,
+                    "mouse_movement_enabled": True,
+                    "inventory_check_enabled": True,
+                },
+                "breaks": {
+                    "enabled": False,  # Keep custom break logic
+                },
+            },
+        )
 
     def create_options(self) -> None:
         self.options_builder.add_slider_option(
@@ -113,70 +146,59 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         self._reset_timeouts()
         self._reset_offscreen_interval()
 
+        # === Initialize behavior display ===
+        self.behavior.log_stats_summary(self.log_msg)
+        if hasattr(self, "controller") and self.controller:
+            self.controller.update_behavior_display()
+
+        # Track time for periodic stats logging
+        last_stats_log = time.time()
+        stats_log_interval = 300.0  # 5 minutes
+
         last_action_time = time.time()
         last_progress_time = time.time()
         last_inventory_count = self.count_inventory_items_visual()
         search_failures = 0
 
         with self.timed_session(self.running_time) as session:
-            while session.running:
-                if self._should_stop():
-                    break
+            self.behavior.start_fidgeting(self)
+            try:
+                while session.running:
+                    if self._should_stop():
+                        break
 
-                self._set_state("scanning")
-                self._perform_random_behaviors()
-                self._maybe_offscreen_afk()
-                self._maybe_take_break()
+                    self._set_state("scanning")
+                    # === Use behavior system for random behaviors ===
+                    self.behavior.attention.perform_random_behaviors()
+                    self._maybe_offscreen_afk()
+                    self._maybe_take_break()
 
-                if self._inventory_is_full():
-                    self._set_state("inventory_full")
-                    self.log_msg("Inventory full, handling...")
-                    handled = self._handle_inventory_full()
-                    if handled:
-                        last_progress_time = time.time()
-                        last_inventory_count = self.count_inventory_items_visual()
-                        search_failures = 0
-                        self._reset_timeouts()
-                        self._recovery_stage = 0
-                    self._sleep(0.4, 1.2)
-                    continue
+                    # === Periodic stats logging ===
+                    now = time.time()
+                    if now - last_stats_log >= stats_log_interval:
+                        self.behavior.log_stats_summary(self.log_msg)
+                        if hasattr(self, "controller") and self.controller:
+                            stats = self.behavior.get_stats_summary()
+                            self.controller.update_behavior_display(stats=stats)
+                        last_stats_log = now
 
-                if self._is_fishing():
-                    self._set_state("fishing")
-                    last_action_time = time.time()
-                    if not self._wait_while_fishing():
-                        self._run_recovery("fishing timeout")
-                    else:
-                        new_count = self.count_inventory_items_visual()
-                        if new_count > last_inventory_count:
-                            last_inventory_count = new_count
+                    if self._inventory_is_full():
+                        self._set_state("inventory_full")
+                        self.log_msg("Inventory full, handling...")
+                        handled = self._handle_inventory_full()
+                        if handled:
                             last_progress_time = time.time()
-                        self._reset_timeouts()
-                    self._recovery_stage = 0
-                    continue
+                            last_inventory_count = self.count_inventory_items_visual()
+                            search_failures = 0
+                            self._reset_timeouts()
+                            self._recovery_stage = 0
+                        # === Use behavior system for sleep ===
+                        self.behavior.timing.sleep((0.4, 1.2))
+                        continue
 
-                target = self._select_fishing_target()
-                if target is None:
-                    self._set_state("no_spot_found")
-                    search_failures += 1
-                    self.log_msg(f"No fishing spots found (#{search_failures})")
-                    if search_failures >= 3:
-                        self._run_recovery("no fishing spots found")
-                        search_failures = 0
-                    self._sleep(0.5, 1.4)
-                    if self._check_stuck(last_action_time, last_progress_time):
+                    if self._is_fishing():
+                        self._set_state("fishing")
                         last_action_time = time.time()
-                        last_progress_time = time.time()
-                    continue
-
-                search_failures = 0
-                if self._attempt_fish(target):
-                    self._set_state("clicking_spot")
-                    self.log_msg("Clicked fishing spot; waiting for fishing to start.")
-                    self._set_state("waiting_for_fish")
-                    if self._wait_for_fish_start():
-                        last_action_time = time.time()
-                        session.increment("spots_clicked")
                         if not self._wait_while_fishing():
                             self._run_recovery("fishing timeout")
                         else:
@@ -185,16 +207,55 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                                 last_inventory_count = new_count
                                 last_progress_time = time.time()
                             self._reset_timeouts()
-                            self._recovery_stage = 0
-                    else:
-                        self._run_recovery("fishing did not start")
-                else:
-                    self._set_state("spot_click_failed")
-                    self._sleep(0.2, 0.9)
+                        self._recovery_stage = 0
+                        continue
 
-                if self._check_stuck(last_action_time, last_progress_time):
-                    last_action_time = time.time()
-                    last_progress_time = time.time()
+                    target = self._select_fishing_target()
+                    if target is None:
+                        self._set_state("no_spot_found")
+                        search_failures += 1
+                        self.log_msg(f"No fishing spots found (#{search_failures})")
+                        if search_failures >= 3:
+                            self._run_recovery("no fishing spots found")
+                            search_failures = 0
+                        # === Use behavior system for sleep ===
+                        self.behavior.timing.sleep((0.5, 1.4))
+                        if self._check_stuck(last_action_time, last_progress_time):
+                            last_action_time = time.time()
+                            last_progress_time = time.time()
+                        continue
+
+                    search_failures = 0
+                    if self._attempt_fish(target):
+                        self._set_state("clicking_spot")
+                        self.log_msg(
+                            "Clicked fishing spot; waiting for fishing to start."
+                        )
+                        self._set_state("waiting_for_fish")
+                        if self._wait_for_fish_start():
+                            last_action_time = time.time()
+                            session.increment("spots_clicked")
+                            if not self._wait_while_fishing():
+                                self._run_recovery("fishing timeout")
+                            else:
+                                new_count = self.count_inventory_items_visual()
+                                if new_count > last_inventory_count:
+                                    last_inventory_count = new_count
+                                    last_progress_time = time.time()
+                                self._reset_timeouts()
+                                self._recovery_stage = 0
+                        else:
+                            self._run_recovery("fishing did not start")
+                    else:
+                        self._set_state("spot_click_failed")
+                        # === Use behavior system for sleep ===
+                        self.behavior.timing.sleep((0.2, 0.9))
+
+                    if self._check_stuck(last_action_time, last_progress_time):
+                        last_action_time = time.time()
+                        last_progress_time = time.time()
+            finally:
+                self.behavior.stop_fidgeting()
 
         self._set_state("finished")
         self.log_msg("Fishing session complete.")
@@ -223,7 +284,8 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
 
         self.log_msg(f"Dropping {self.fish_type} from slots: {slots}")
         self._drop_slots_fast(slots)
-        self._sleep(0.15, 0.45)
+        # === Use behavior system for sleep ===
+        self.behavior.timing.sleep((0.15, 0.45))
 
         if self.is_inventory_full_visual():
             self._stop_with_message(
@@ -240,6 +302,7 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             self.log_msg("Failed to start drop: window focus lost")
             return
         try:
+            self.behavior.pause_fidgeting()
             total_slots = len(self.win.inventory_slots)
             if total_slots == 0:
                 return
@@ -250,18 +313,18 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             def _click_slot(slot_idx: int) -> None:
                 slot = self.win.inventory_slots[slot_idx]
                 p = slot.random_point()
-                self.mouse.move_to(
+                # === Use behavior system for mouse movement ===
+                self.behavior.mouse.move_to(
                     (p[0], p[1]),
                     mouseSpeed="fastest",
                     knotsCount=1,
                     offsetBoundaryX=12,
                     offsetBoundaryY=12,
                 )
-                time.sleep(rd.truncated_normal_sample(0.01, 0.04, mean=0.02, std=0.008))
-                self.mouse.click()
-                time.sleep(
-                    rd.truncated_normal_sample(0.01, 0.03, mean=0.015, std=0.006)
-                )
+                # === Use behavior system for timing ===
+                self.behavior.timing.sleep((0.01, 0.04))
+                self.behavior.mouse.click()
+                self.behavior.timing.sleep((0.01, 0.03))
 
             for pair_start in range(0, total_rows, 2):
                 for col in range(slots_per_row):
@@ -277,12 +340,13 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                         clicked = True
 
                     if clicked:
-                        time.sleep(
-                            rd.truncated_normal_sample(0.04, 0.12, mean=0.07, std=0.02)
-                        )
+                        # === Use behavior system for sleep ===
+                        self.behavior.timing.sleep((0.04, 0.12))
 
-                time.sleep(rd.truncated_normal_sample(0.06, 0.18, mean=0.1, std=0.03))
+                # === Use behavior system for sleep ===
+                self.behavior.timing.sleep((0.06, 0.18))
         finally:
+            self.behavior.resume_fidgeting()
             self._safe_key_up("shift")
 
     def _reset_offscreen_interval(self) -> None:
@@ -302,7 +366,8 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         duration = rd.truncated_normal_sample(2.0, 10.0, mean=3.5, std=1.5)
         try:
             self.log_msg(f"Offscreen AFK for {duration:.1f}s.")
-            self.mouse.move_to(target, mouseSpeed="slow")
+            # === Use behavior system for mouse movement ===
+            self.behavior.mouse.move_to(target, mouseSpeed="slow")
             time.sleep(duration)
         except Exception as exc:
             self.log_msg(f"Offscreen afk error: {exc}")
@@ -506,31 +571,33 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
 
     def _attempt_fish(self, target: RuneLiteObject) -> bool:
         try:
+            self.behavior.pause_fidgeting()
             click_point = target.random_point()
-            if random.random() < 0.08:
-                miss = Point(
-                    click_point.x + random.randint(-12, 12),
-                    click_point.y + random.randint(-12, 12),
-                )
-                self.mouse.move_to(miss, mouseSpeed="fast")
-                self.mouse.click()
-                self._sleep(0.2, 0.6)
+            # === Use behavior system for misclick simulation ===
+            if self.behavior.action.should_misclick():
+                self.behavior.action.execute_misclick(target)
 
-            self.mouse.move_to(
+            # === Use behavior system for mouse movement ===
+            self.behavior.mouse.move_to(
                 click_point, mouseSpeed=random.choice(["slow", "medium", "fast"])
             )
-            self._sleep(0.1, 0.4)
+            # === Use behavior system for sleep ===
+            self.behavior.timing.sleep((0.1, 0.4))
 
             if not self._is_fish_hover():
                 self.log_msg("Hover text did not match fishing spot; retrying.")
                 return False
 
-            self.mouse.click()
-            self._sleep(0.2, 0.6)
+            # === Use behavior system for clicking ===
+            self.behavior.mouse.click()
+            # === Use behavior system for sleep ===
+            self.behavior.timing.sleep((0.2, 0.6))
             return True
         except Exception as exc:
             self.log_msg(f"Fishing attempt error: {exc}")
             return False
+        finally:
+            self.behavior.resume_fidgeting()
 
     def _is_fish_hover(self) -> bool:
         if not self.mouseover_text(contains="Fishing spot"):
@@ -554,7 +621,8 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             if time.time() - last_log > 1.5:
                 self.log_msg("Still waiting for fishing to start...")
                 last_log = time.time()
-            self._sleep(0.08, 0.25)
+            # === Use behavior system for sleep ===
+            self.behavior.timing.sleep((0.08, 0.25))
         self._log_action_text_debug("fish_start_timeout")
         self.log_msg("Timed out waiting for fishing to start.")
         return False
@@ -571,7 +639,8 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             if time.time() - last_log > 6.0:
                 self.log_msg("Still fishing...")
                 last_log = time.time()
-            self._sleep(0.2, 0.6)
+            # === Use behavior system for sleep ===
+            self.behavior.timing.sleep((0.2, 0.6))
         self.log_msg("Fishing stopped; searching for a new spot.")
         return True
 
