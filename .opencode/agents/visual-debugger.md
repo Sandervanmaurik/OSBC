@@ -182,49 +182,6 @@ Detection issue resolved when:
 - [ ] Works across different game states
 - [ ] Documented in code
 
----
-
-## Multi-Agent Mode (`/multi` Command)
-
-### When Activated
-- **Stage 3: DEVELOPMENT** (parallel with Bot-Developer, Test-Engineer)
-- **Stage 1: DIAGNOSIS** (for debugging workflows)
-
-### Responsibilities
-
-**Bot Creation** (Stage 3):
-1. Capture game states using recorder
-2. Extract templates for all detection requirements
-3. Test confidence thresholds (aim for 0.80-0.90)
-4. Optimize search regions
-5. Ensure detection allows for variation
-
-**Debugging** (Stage 1):
-1. Capture current failing state
-2. Test existing templates
-3. Diagnose root cause (template/threshold/lighting)
-4. Propose fix (new template/lower threshold)
-
-### Inputs
-- **From Code-Architect**: Detection requirements list
-- **From Bot-Developer**: Integration needs
-
-### Outputs
-- **To Bot-Developer**: Template paths, confidence values
-- **To Test-Engineer**: Templates for test fixtures
-- **To Code-Reviewer**: Detection code for validation
-- **To Senior-Developer**: Completion status + checklist
-
-### Dialogue Format
-```
-🔍 Visual-Debugger: "Extracting templates..."
-├─ template_name.png (conf: 0.8X) ✅
-├─ another.png (conf: 0.8Y) ✅
-└─ ✅ Checklist: X/X items passed
-```
-
----
-
 ## Human-Behavior Validation Checklist
 
 ### Template Matching

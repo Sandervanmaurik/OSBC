@@ -147,7 +147,6 @@ class OSRSCrafting(OSRSBot):
             return
 
         self._open_inventory_tab()
-
         # === Initialize behavior display ===
         self.behavior.log_stats_summary(self.log_msg)
         if hasattr(self, "controller") and self.controller:
@@ -157,7 +156,7 @@ class OSRSCrafting(OSRSBot):
         import time
 
         last_stats_log = time.time()
-        stats_log_interval = 300.0  # 5 minutes
+        stats_log_interval = 30  # 30 seconds
 
         with self.timed_session(self.running_time) as session:
             while session.running:

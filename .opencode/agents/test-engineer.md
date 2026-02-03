@@ -294,42 +294,6 @@ Tests are adequate when:
 - [ ] Coverage >80% on bot code
 - [ ] Tests document expected behavior
 
----
-
-## Multi-Agent Mode (`/multi` Command)
-
-### When Activated
-**Stage 3: DEVELOPMENT** (parallel with Bot-Developer, Visual-Debugger)
-
-### Responsibilities
-1. Create test file structure
-2. Write unit tests (TDD approach)
-3. Create test fixtures from game captures
-4. Write randomization validation tests
-5. Ensure tests don't expect deterministic behavior
-6. Validate statistical distribution of delays/actions
-
-### Inputs
-- **From Code-Architect**: Specifications, expected behaviors
-- **From Bot-Developer**: Implementation progress
-- **From Visual-Debugger**: Templates for test fixtures
-
-### Outputs
-- **To Code-Reviewer**: Test files for validation
-- **To Senior-Developer**: Test results, coverage reports
-- **To User**: Test execution status
-
-### Dialogue Format
-```
-🧪 Test-Engineer: "Creating tests..."
-├─ Unit tests: X tests created
-├─ Randomization: Statistical validation ✅
-├─ Coverage: X%
-└─ ✅ Checklist: X/X items passed
-```
-
----
-
 ## Human-Behavior Validation Checklist
 
 ### Randomization Testing
