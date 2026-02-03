@@ -308,7 +308,6 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
 
         all_slots = sorted({slot for slots in slots_by_ore.values() for slot in slots})
         ores = ", ".join(slots_by_ore.keys())
-        self.log_msg(f"Dropping ore ({ores}) from slots: {all_slots}")
         # === Pause fidgeting during drop to prevent mouse stuttering ===
         self.behavior.pause_fidgeting()
         try:
@@ -374,46 +373,27 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
 
     def _find_ore_slots(self, ore_types: List[str]) -> Dict[str, List[int]]:
         found: Dict[str, List[int]] = {}
-        start = time.perf_counter()
         slot_count = len(self.win.inventory_slots)
-        self.log_msg(f"_find_ore_slots start (slots={slot_count}, ores={ore_types})")
         if slot_count == 0:
             self.log_msg("_find_ore_slots aborted: no inventory slots available")
             return found
 
         for ore in ore_types:
-            ore_start = time.perf_counter()
             try:
                 filename = self.ORE_TEMPLATES.get(ore)
                 if not filename:
                     self.log_msg(f"_find_ore_slots skip: no template for ore '{ore}'")
                     continue
                 template_path = str(imsearch.get_template_path("mining", filename))
-                self.log_msg(f"_find_ore_slots searching {ore} using {template_path}")
                 slots = self.find_item_in_inventory_visual(
                     template_path, confidence=self.ORE_MATCH_CONFIDENCE
                 )
                 if slots:
-                    self.log_msg(f"Detected {ore} ore in slots: {slots}")
                     found[ore] = slots
                 else:
                     self.log_msg(f"No {ore} ore detected")
             except Exception as exc:
                 self.log_msg(f"_find_ore_slots error while searching {ore}: {exc}")
-            finally:
-                elapsed = time.perf_counter() - ore_start
-                self.log_msg(f"_find_ore_slots {ore} search time: {elapsed:.2f}s")
-
-            if time.perf_counter() - start > 6.0:
-                self.log_msg(
-                    "_find_ore_slots timeout exceeded 6.0s, returning partial results"
-                )
-                break
-
-        total_elapsed = time.perf_counter() - start
-        self.log_msg(
-            f"_find_ore_slots done in {total_elapsed:.2f}s, found={list(found.keys())}"
-        )
         return found
 
     def _select_rock_target(self) -> Optional[RuneLiteObject]:
@@ -426,7 +406,7 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             click_point = target.random_point()
             # === Use behavior system for misclick simulation ===
             if self.behavior.action.should_misclick():
-                self.behavior.action.execute_misclick(target)
+                self.behavior.action.execute_misclick(click_point)
 
             # === Use behavior system for mouse movement ===
             self.behavior.mouse.move_to(
@@ -485,9 +465,7 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
         return True
 
     def _is_mining(self) -> bool:
-        if self.is_player_doing_action("Mining"):
-            return True
-        return self._action_text_contains(["Mining", "Swinging"])
+        return self.is_player_doing_action("Mining")
 
     def _stop_with_message(self, message: str) -> None:
         self.log_msg(message)

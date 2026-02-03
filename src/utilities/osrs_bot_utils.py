@@ -94,7 +94,9 @@ class OSRSBotBehaviorMixin:
     def _random_mouse_movement(self) -> None:
         try:
             point = self.win.game_view.random_point()
-            self.mouse.move_to(point, mouseSpeed=random.choice(["medium", "fast", "fastest"]))
+            self.mouse.move_to(
+                point, mouseSpeed=random.choice(["medium", "fast", "fastest"])
+            )
             self._sleep(0.2, 0.7)
         except Exception as exc:
             self.log_msg(f"Random mouse movement error: {exc}")
@@ -102,7 +104,9 @@ class OSRSBotBehaviorMixin:
     def _check_inventory_random(self) -> None:
         try:
             if len(self.win.cp_tabs) > 3:
-                self.mouse.move_to(self.win.cp_tabs[3].random_point(), mouseSpeed="fast")
+                self.mouse.move_to(
+                    self.win.cp_tabs[3].random_point(), mouseSpeed="fast"
+                )
                 self.mouse.click()
                 self._sleep(0.2, 0.6)
             if self.win.inventory_slots:
@@ -118,10 +122,14 @@ class OSRSBotBehaviorMixin:
                 if hasattr(self, "refresh_skill_levels"):
                     self.refresh_skill_levels(open_tab=True, return_to_inventory=True)
                 else:
-                    self.mouse.move_to(self.win.cp_tabs[1].random_point(), mouseSpeed="fast")
+                    self.mouse.move_to(
+                        self.win.cp_tabs[1].random_point(), mouseSpeed="fast"
+                    )
                     self.mouse.click()
                     self._sleep(0.7, 1.8)
-                    self.mouse.move_to(self.win.cp_tabs[3].random_point(), mouseSpeed="fast")
+                    self.mouse.move_to(
+                        self.win.cp_tabs[3].random_point(), mouseSpeed="fast"
+                    )
                     self.mouse.click()
                     self._sleep(0.2, 0.6)
         except Exception as exc:
@@ -196,8 +204,10 @@ class OSRSBotBehaviorMixin:
 
     def _run_recovery(self, reason: str) -> None:
         self.log_msg(f"Recovery step {self._recovery_stage + 1}: {reason}")
+        # Randomly choose zoom in or zoom out for first step (60% out, 40% in)
+        zoom_action = self._zoom_out if random.random() < 0.6 else self._zoom_in
         plan = [
-            self._zoom_out,
+            zoom_action,
             self._open_inventory_tab,
             self._mini_camera_adjust,
             self._rotate_camera_search,
@@ -240,6 +250,23 @@ class OSRSBotBehaviorMixin:
         except Exception as exc:
             self.log_msg(f"Zoom error: {exc}")
 
+    def _zoom_in(self) -> None:
+        self.log_msg("Zooming in for closer view...")
+        try:
+            if not self._ensure_focus():
+                self.log_msg("Cannot zoom in, game not focused.")
+                return
+            center = self.win.game_view.get_center()
+            self.mouse.move_to(center, mouseSpeed="fast")
+            self._sleep(0.1, 0.25)
+            scroll_clicks = random.randint(2, 4)
+            for _ in range(scroll_clicks):
+                pag.scroll(240)
+                self._sleep(0.05, 0.12)
+            self._sleep(0.2, 0.5)
+        except Exception as exc:
+            self.log_msg(f"Zoom error: {exc}")
+
     def _click_ground_near_center(self) -> None:
         try:
             center = self.win.game_view.get_center()
@@ -254,7 +281,9 @@ class OSRSBotBehaviorMixin:
         except Exception as exc:
             self.log_msg(f"Ground click error: {exc}")
 
-    def _select_tagged_target(self, targets: List[RuneLiteObject]) -> Optional[RuneLiteObject]:
+    def _select_tagged_target(
+        self, targets: List[RuneLiteObject]
+    ) -> Optional[RuneLiteObject]:
         if not targets:
             return None
         valid = [target for target in targets if self._is_valid_target(target)]
