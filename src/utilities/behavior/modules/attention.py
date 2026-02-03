@@ -98,6 +98,7 @@ class AttentionBehavior(BaseBehaviorModule):
             if now - self._last_camera_move >= self._camera_interval:
                 if random.random() < 0.7:  # Don't always move camera
                     self.random_camera_movement()
+                    self.bot.behavior.increment_stat("camera")
                 self._last_camera_move = now
                 self._camera_interval = self._random_interval("camera")
 
@@ -105,6 +106,7 @@ class AttentionBehavior(BaseBehaviorModule):
         if self.config.get("skill_check_enabled", True):
             if now - self._last_skill_check >= self._skill_interval:
                 self.random_skill_check()
+                self.bot.behavior.increment_stat("skill_check")
                 self._last_skill_check = now
                 self._skill_interval = self._random_interval("skill_check")
 
@@ -112,6 +114,7 @@ class AttentionBehavior(BaseBehaviorModule):
         if self.config.get("mouse_movement_enabled", True):
             if now - self._last_mouse_movement >= self._mouse_interval:
                 self.random_mouse_movement()
+                self.bot.behavior.increment_stat("mouse_movement")
                 self._last_mouse_movement = now
                 self._mouse_interval = self._random_interval("mouse_movement")
 
@@ -119,6 +122,7 @@ class AttentionBehavior(BaseBehaviorModule):
         if self.config.get("inventory_check_enabled", True):
             if now - self._last_inventory_check >= self._inventory_interval:
                 self.check_inventory_random()
+                self.bot.behavior.increment_stat("inventory_check")
                 self._last_inventory_check = now
                 self._inventory_interval = self._random_interval("inventory_check")
 

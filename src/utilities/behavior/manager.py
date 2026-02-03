@@ -1,5 +1,7 @@
 """Behavior manager for orchestrating all behavior modules."""
 
+import time
+from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Any, Optional
 
 from utilities.behavior.profiles import BehaviorProfiles
@@ -95,6 +97,10 @@ class BehaviorManager:
 
         # Store final config
         self.config = profile_config
+
+        # Initialize stats tracking
+        self.stats = defaultdict(int)
+        self.stats_start_time = time.time()
 
         # Initialize all behavior modules
         self.timing = TimingBehavior(config=profile_config.get("timing", {}), bot=bot)
@@ -284,3 +290,73 @@ class BehaviorManager:
             f"  Camera Enabled: {self.attention.config.get('camera_enabled', True)}",
         ]
         return "\n".join(lines)
+
+    def increment_stat(self, category: str) -> None:
+        """
+        Increment a behavior stat counter.
+
+        Args:
+            category: Stat category (e.g., "camera", "mouse_movement", "skill_check")
+
+        Example:
+            self.behavior.increment_stat("camera")
+        """
+        self.stats[category] += 1
+
+    def get_stats_summary(self, since_time: Optional[float] = None) -> Dict[str, Any]:
+        """
+        Get summary of behavior statistics.
+
+        Args:
+            since_time: Optional timestamp to calculate duration from (defaults to stats_start_time)
+
+        Returns:
+            Dictionary with stat counts and duration
+
+        Example:
+            summary = self.behavior.get_stats_summary()
+            # {"camera": 5, "mouse_movement": 12, "duration_seconds": 300}
+        """
+        start = since_time if since_time is not None else self.stats_start_time
+        duration = time.time() - start
+
+        summary = dict(self.stats)
+        summary["duration_seconds"] = duration
+        summary["duration_minutes"] = duration / 60.0
+        return summary
+
+    def reset_stats(self) -> None:
+        """
+        Reset all behavior statistics and start time.
+
+        Example:
+            self.behavior.reset_stats()
+        """
+        self.stats.clear()
+        self.stats_start_time = time.time()
+
+    def log_stats_summary(self, bot_logger=None) -> None:
+        """
+        Log a summary of behavior statistics.
+
+        Args:
+            bot_logger: Optional logger function (defaults to self.bot.log_msg)
+
+        Example:
+            self.behavior.log_stats_summary()
+        """
+        logger = bot_logger or (
+            self.bot.log_msg if hasattr(self.bot, "log_msg") else print
+        )
+        summary = self.get_stats_summary()
+
+        duration_min = summary.get("duration_minutes", 0)
+        camera = summary.get("camera", 0)
+        mouse = summary.get("mouse_movement", 0)
+        skill = summary.get("skill_check", 0)
+        inventory = summary.get("inventory_check", 0)
+
+        logger(
+            f"Behavior stats ({duration_min:.1f}min): "
+            f"Camera={camera}, Mouse={mouse}, Skills={skill}, Inventory={inventory}"
+        )

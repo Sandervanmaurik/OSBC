@@ -3,6 +3,7 @@ import customtkinter
 from view.info_frame import InfoFrame
 from view.output_log_frame import OutputLogFrame
 from view.skills_frame import SkillsFrame
+from view.behavior_frame import BehaviorFrame
 
 
 class BotView(customtkinter.CTkFrame):
@@ -10,22 +11,23 @@ class BotView(customtkinter.CTkFrame):
         """
         A base frame for all bot views. This frame contains the following:
             - Info frame (controls, title, description, progress) - spans full width at top
-            - Skills frame (skill levels display) - bottom left (30% width)
-            - Output log frame (log messages) - bottom right (70% width)
+            - Skills frame (skill levels display) - left column (30% width)
+            - Behavior frame (behavior settings display) - left column below skills (30% width)
+            - Output log frame (log messages) - right column (70% width)
         This view needs to be configured using setup() to populate fields based
         on the bot's title and description, as well as setting controllers for the child views.
         """
         super().__init__(parent)
 
-        # Configure grid layout for compact 2-column bottom layout
-        # Row 0: Controls (full width)
-        # Row 1: Skills (30%) | Logs (70%)
+        # Configure grid layout
+        # Row 0: Info (full width)
+        # Row 1: Skills (30%) | Logs (70%) - logs span rows 1-2
+        # Row 2: Behavior (30%)
         self.rowconfigure(0, weight=0)  # controls row - fixed height
-        self.rowconfigure(1, weight=1)  # skills/logs row - resizable
-        self.columnconfigure(
-            0, weight=0, minsize=280
-        )  # skills column - fixed width ~30%
-        self.columnconfigure(1, weight=1)  # logs column - expandable ~70%
+        self.rowconfigure(1, weight=0)  # skills row - fixed height
+        self.rowconfigure(2, weight=1)  # behavior row - expandable (pushes logs down)
+        self.columnconfigure(0, weight=0, minsize=280)  # left column - fixed width ~30%
+        self.columnconfigure(1, weight=1)  # right column - expandable ~70%
 
         # ---------- TOP (script info and control buttons) ----------
         self.frame_info = InfoFrame(parent=self, title="Title", info="Description")
@@ -36,14 +38,20 @@ class BotView(customtkinter.CTkFrame):
         # ---------- BOTTOM LEFT (skills display) ----------
         self.frame_skills = SkillsFrame(parent=self)
         self.frame_skills.grid(
-            row=1, column=0, pady=(0, 15), padx=(15, 7), sticky="new"
+            row=1, column=0, pady=(0, 7), padx=(15, 7), sticky="new"
         )  # Anchor to top (north), expand horizontally (east-west)
+
+        # ---------- BOTTOM LEFT (behavior display) ----------
+        self.frame_behavior = BehaviorFrame(parent=self)
+        self.frame_behavior.grid(
+            row=2, column=0, pady=(0, 15), padx=(15, 7), sticky="new"
+        )  # Below skills
 
         # ---------- BOTTOM RIGHT (log text box) ----------
         self.frame_output_log = OutputLogFrame(parent=self)
         self.frame_output_log.grid(
-            row=1, column=1, pady=(0, 15), padx=(7, 15), sticky="nsew"
-        )
+            row=1, column=1, rowspan=2, pady=(0, 15), padx=(7, 15), sticky="nsew"
+        )  # Span rows 1-2
 
         self.controller = None
 
@@ -56,4 +64,13 @@ class BotView(customtkinter.CTkFrame):
         self.controller = controller
         self.frame_info.set_controller(controller=controller)
         self.frame_output_log.set_controller(controller=controller)
-        # Note: skills frame doesn't need direct controller access
+        # Note: skills and behavior frames don't need direct controller access
+
+    def update_behavior_display(self, behavior_config, stats=None):
+        """
+        Updates the behavior settings display.
+        Args:
+            behavior_config: Dictionary from BehaviorManager.config
+            stats: Optional stats dictionary from BehaviorManager.get_stats_summary()
+        """
+        self.frame_behavior.update_behavior_display(behavior_config, stats)

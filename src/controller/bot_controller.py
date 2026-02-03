@@ -119,6 +119,18 @@ class BotController(object):
         """
         self.view.frame_skills.update_skills(skill_data)
 
+    def update_behavior_display(self, behavior_config=None, stats=None):
+        """
+        Called from model. Tells view to update behavior settings display.
+        Args:
+            behavior_config: BehaviorManager.config dictionary
+            stats: Optional stats dictionary from BehaviorManager.get_stats_summary()
+        """
+        if behavior_config is None and hasattr(self.model, "behavior"):
+            behavior_config = self.model.behavior.config
+        if behavior_config is not None:
+            self.view.update_behavior_display(behavior_config, stats)
+
     def update_log(self, msg: str, overwrite: bool = False):
         """
         Called from model. Tells view to update log.

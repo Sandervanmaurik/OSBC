@@ -63,10 +63,10 @@ class OSRSFletching(OSRSBot):
         self._attaching_end_timeout = 55.0
 
         # === NEW: Initialize behavior system ===
-        # Use "focused" profile with customizations for fletching
+        # Use "high-active" profile with customizations for fletching
         self.behavior = BehaviorManager(
             bot=self,
-            profile="focused",  # Fast, efficient profile
+            profile="high-active",  # Fast, efficient profile
             custom_config={
                 "timing": {
                     "speed_multiplier": 0.8,  # Even faster for fletching
@@ -127,6 +127,17 @@ class OSRSFletching(OSRSBot):
         self._open_inventory_tab()
         self._schedule_next_break()
 
+        # === Initialize behavior display ===
+        self.behavior.log_stats_summary(self.log_msg)
+        if hasattr(self, "controller") and self.controller:
+            self.controller.update_behavior_display()
+
+        # Track time for periodic stats logging
+        import time
+
+        last_stats_log = time.time()
+        stats_log_interval = 300.0  # 5 minutes
+
         with self.timed_session(self.running_time) as session:
             while session.running:
                 if self._should_stop():
@@ -134,6 +145,15 @@ class OSRSFletching(OSRSBot):
 
                 # === NEW: Use attention behaviors (mouse movement only) ===
                 self.behavior.attention.perform_random_behaviors()
+
+                # === Periodic stats logging (every 5 minutes) ===
+                now = time.time()
+                if now - last_stats_log >= stats_log_interval:
+                    self.behavior.log_stats_summary(self.log_msg)
+                    if hasattr(self, "controller") and self.controller:
+                        stats = self.behavior.get_stats_summary()
+                        self.controller.update_behavior_display(stats=stats)
+                    last_stats_log = now
 
                 if self._should_take_break():
                     self._take_break()

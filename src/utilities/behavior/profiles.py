@@ -11,24 +11,25 @@ class BehaviorProfiles:
     can be used as-is or customized further.
 
     Profiles:
-        - CAUTIOUS: Slower, more deliberate. Maximum human-like behavior.
-        - EXPERIENCED: Balanced, efficient gameplay. (Recommended default)
-        - FOCUSED: Fast, minimal distractions. Good for short sessions.
+        - LOW_ACTIVE: Slower, more deliberate. Maximum human-like behavior.
+        - ACTIVE: Balanced, efficient gameplay. (Recommended default)
+        - HIGH_ACTIVE: Fast, minimal distractions. Good for short sessions.
+        - AFK: Very slow, minimal attention. For semi-AFK activities.
 
     Example:
         # Use predefined profile
-        manager = BehaviorManager(bot, profile="experienced")
+        manager = BehaviorManager(bot, profile="active")
 
         # Customize profile
         manager = BehaviorManager(
             bot,
-            profile="cautious",
+            profile="low-active",
             custom_config={"timing": {"speed_multiplier": 1.5}}
         )
     """
 
-    CAUTIOUS = {
-        "name": "Cautious",
+    LOW_ACTIVE = {
+        "name": "Low-Active",
         "description": "Slower, more deliberate actions. Maximum human-like behavior.",
         "timing": {
             "speed_multiplier": 1.3,  # 30% slower than base
@@ -70,8 +71,8 @@ class BehaviorProfiles:
         },
     }
 
-    EXPERIENCED = {
-        "name": "Experienced",
+    ACTIVE = {
+        "name": "Active",
         "description": "Balanced, efficient gameplay. Recommended for most bots.",
         "timing": {
             "speed_multiplier": 1.0,  # Base speed
@@ -113,8 +114,8 @@ class BehaviorProfiles:
         },
     }
 
-    FOCUSED = {
-        "name": "Focused",
+    HIGH_ACTIVE = {
+        "name": "High-Active",
         "description": "Fast, minimal distractions. Good for short, efficient sessions.",
         "timing": {
             "speed_multiplier": 0.85,  # 15% faster than base
@@ -156,13 +157,56 @@ class BehaviorProfiles:
         },
     }
 
+    AFK = {
+        "name": "AFK",
+        "description": "Very slow, minimal attention. For semi-AFK activities.",
+        "timing": {
+            "speed_multiplier": 1.8,  # 80% slower than base (very slow)
+            "reaction_min": 0.3,
+            "reaction_max": 0.9,
+        },
+        "mouse": {
+            "default_speed": "slow",
+            "default_knots": None,
+            "overshoot_chance": 0.15,  # More human-like errors
+        },
+        "action": {
+            "misclick_chance": 0.18,  # Higher misclick (distracted)
+            "misclick_distance": (-15, 15),
+            "hesitation_chance": 0.35,  # Lots of hesitation
+            "hesitation_duration": (0.5, 1.5),
+            "pre_click_delay_chance": 0.5,
+        },
+        "attention": {
+            "camera_enabled": True,
+            "camera_interval": (120.0, 300.0),  # Very infrequent (2-5 minutes)
+            "camera_horizontal_range": (-120, 120),
+            "camera_vertical_range": (-20, 20),
+            "camera_vertical_chance": 0.4,
+            "skill_check_enabled": True,
+            "skill_check_interval": (180.0, 420.0),  # Very infrequent (3-7 minutes)
+            "mouse_movement_enabled": True,
+            "mouse_movement_interval": (90.0, 240.0),  # Infrequent (1.5-4 minutes)
+            "inventory_check_enabled": True,
+            "inventory_check_interval": (120.0, 300.0),  # Infrequent (2-5 minutes)
+        },
+        "breaks": {
+            "enabled": True,
+            "chance_per_check": 0.05,  # More frequent breaks
+            "duration_min": 15.0,
+            "duration_max": 60.0,
+            "duration_mean": 30.0,
+            "duration_std": 10.0,
+        },
+    }
+
     @classmethod
     def get(cls, profile_name: str) -> Dict[str, Any]:
         """
         Get a profile by name (case-insensitive).
 
         Args:
-            profile_name: Name of the profile ("cautious", "experienced", "focused")
+            profile_name: Name of the profile ("low-active", "active", "high-active", "afk")
 
         Returns:
             Profile configuration dictionary
@@ -171,12 +215,13 @@ class BehaviorProfiles:
             ValueError: If profile name is not recognized
 
         Example:
-            profile = BehaviorProfiles.get("experienced")
+            profile = BehaviorProfiles.get("active")
         """
         profile_map = {
-            "cautious": cls.CAUTIOUS,
-            "experienced": cls.EXPERIENCED,
-            "focused": cls.FOCUSED,
+            "low-active": cls.LOW_ACTIVE,
+            "active": cls.ACTIVE,
+            "high-active": cls.HIGH_ACTIVE,
+            "afk": cls.AFK,
         }
 
         key = profile_name.lower()
@@ -199,7 +244,7 @@ class BehaviorProfiles:
         Returns:
             List of profile names
         """
-        return ["cautious", "experienced", "focused"]
+        return ["low-active", "active", "high-active", "afk"]
 
     @classmethod
     def get_profile_description(cls, profile_name: str) -> str:
