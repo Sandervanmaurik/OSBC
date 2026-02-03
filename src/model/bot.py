@@ -2,6 +2,7 @@
 A Bot is a base class for bot script models. It is abstract and cannot be instantiated. Many of the methods in this base class are
 pre-implemented and can be used by subclasses, or called by the controller. Code in this class should not be modified.
 """
+
 import random
 import re
 import threading
@@ -9,7 +10,7 @@ import time
 import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional, Tuple
 
 import cv2
 import customtkinter
@@ -401,7 +402,11 @@ class Bot(ABC):
 
                 for row_idx, row_slots in enumerate(non_empty_rows):
                     for slot_idx in row_slots:
-                        if missed_slot is not None and row_idx == missed_row and slot_idx == missed_slot:
+                        if (
+                            missed_slot is not None
+                            and row_idx == missed_row
+                            and slot_idx == missed_slot
+                        ):
                             if dropped_slots:
                                 misclick_slot = random.choice(dropped_slots)
                                 _click_slot(
@@ -481,9 +486,13 @@ class Bot(ABC):
                     offsetBoundaryX=40,
                     tween=pytweening.easeInOutQuad,
                 )
-                time.sleep(rd.truncated_normal_sample(0.005, 0.02, mean=0.01, std=0.006))
+                time.sleep(
+                    rd.truncated_normal_sample(0.005, 0.02, mean=0.01, std=0.006)
+                )
                 self.mouse.click()
-                time.sleep(rd.truncated_normal_sample(0.005, 0.025, mean=0.01, std=0.006))
+                time.sleep(
+                    rd.truncated_normal_sample(0.005, 0.025, mean=0.01, std=0.006)
+                )
         finally:
             # Always release shift to prevent stuck key
             self._safe_key_up("shift")
@@ -564,12 +573,14 @@ class Bot(ABC):
         tab_center = logout_tab.get_center()
         logout_button_pos = Point(
             tab_center.x + round(rd.truncated_normal_sample(-5, 5)),
-            tab_center.y - 53 + round(rd.truncated_normal_sample(-5, 5))
+            tab_center.y - 53 + round(rd.truncated_normal_sample(-5, 5)),
         )
         self.mouse.move_to(logout_button_pos)
         self.mouse.click()
 
-    def take_break(self, min_seconds: int = 1, max_seconds: int = 30, fancy: bool = False):
+    def take_break(
+        self, min_seconds: int = 1, max_seconds: int = 30, fancy: bool = False
+    ):
         """
         Takes a break for a random amount of time.
         Args:
@@ -585,7 +596,9 @@ class Bot(ABC):
             length = rd.truncated_normal_sample(min_seconds, max_seconds)
         length = round(length)
         for i in range(length):
-            self.log_msg(f"Taking a break... {int(length) - i} seconds left.", overwrite=True)
+            self.log_msg(
+                f"Taking a break... {int(length) - i} seconds left.", overwrite=True
+            )
             time.sleep(1)
         self.log_msg(f"Done taking {length} second break.", overwrite=True)
 
@@ -615,7 +628,9 @@ class Bot(ABC):
         """
         Gets the HP value of the player. Returns -1 if the value couldn't be read.
         """
-        if res := ocr.extract_text(self.win.hp_orb_text, ocr.PLAIN_11, [clr.ORB_GREEN, clr.ORB_RED]):
+        if res := ocr.extract_text(
+            self.win.hp_orb_text, ocr.PLAIN_11, [clr.ORB_GREEN, clr.ORB_RED]
+        ):
             return int("".join(re.findall(r"\d", res)))
         return -1
 
@@ -623,7 +638,9 @@ class Bot(ABC):
         """
         Gets the Prayer points of the player. Returns -1 if the value couldn't be read.
         """
-        if res := ocr.extract_text(self.win.prayer_orb_text, ocr.PLAIN_11, [clr.ORB_GREEN, clr.ORB_RED]):
+        if res := ocr.extract_text(
+            self.win.prayer_orb_text, ocr.PLAIN_11, [clr.ORB_GREEN, clr.ORB_RED]
+        ):
             return int("".join(re.findall(r"\d", res)))
         return -1
 
@@ -631,7 +648,9 @@ class Bot(ABC):
         """
         Gets the run energy of the player. Returns -1 if the value couldn't be read.
         """
-        if res := ocr.extract_text(self.win.run_orb_text, ocr.PLAIN_11, [clr.ORB_GREEN, clr.ORB_RED]):
+        if res := ocr.extract_text(
+            self.win.run_orb_text, ocr.PLAIN_11, [clr.ORB_GREEN, clr.ORB_RED]
+        ):
             return int("".join(re.findall(r"\d", res)))
         return -1
 
@@ -639,7 +658,9 @@ class Bot(ABC):
         """
         Gets the special attack energy of the player. Returns -1 if the value couldn't be read.
         """
-        if res := ocr.extract_text(self.win.spec_orb_text, ocr.PLAIN_11, [clr.ORB_GREEN, clr.ORB_RED]):
+        if res := ocr.extract_text(
+            self.win.spec_orb_text, ocr.PLAIN_11, [clr.ORB_GREEN, clr.ORB_RED]
+        ):
             return int("".join(re.findall(r"\d", res)))
         return -1
 
@@ -735,7 +756,7 @@ class Bot(ABC):
         # Menu appears below the compass, calculate absolute target
         target_pos = Point(
             compass_point.x + round(rd.truncated_normal_sample(-5, 5)),
-            compass_point.y + rel_y + round(rd.truncated_normal_sample(-2, 2))
+            compass_point.y + rel_y + round(rd.truncated_normal_sample(-2, 2)),
         )
         self.mouse.move_to(target_pos, mouseSpeed="fast")
         self.mouse.click()
@@ -779,8 +800,12 @@ class Bot(ABC):
             time.sleep(duration)
             pag.keyUp(direction)
 
-        thread_h = threading.Thread(target=keypress_with_focus_check, args=(direction_h, sleep_h), daemon=True)
-        thread_v = threading.Thread(target=keypress_with_focus_check, args=(direction_v, sleep_v), daemon=True)
+        thread_h = threading.Thread(
+            target=keypress_with_focus_check, args=(direction_h, sleep_h), daemon=True
+        )
+        thread_v = threading.Thread(
+            target=keypress_with_focus_check, args=(direction_v, sleep_v), daemon=True
+        )
         delay = rd.fancy_normal_sample(0, max(sleep_h, sleep_v))
         if sleep_h > sleep_v:
             thread_h.start()
@@ -831,8 +856,17 @@ class Bot(ABC):
             combat_style: the attack type ("accurate", "aggressive", "defensive", "controlled", "rapid", "longrange").
         """
         # Ensuring that args are valid
-        if combat_style not in ["accurate", "aggressive", "defensive", "controlled", "rapid", "longrange"]:
-            raise ValueError(f"Invalid combat style: {combat_style}. See function docstring for valid options.")
+        if combat_style not in [
+            "accurate",
+            "aggressive",
+            "defensive",
+            "controlled",
+            "rapid",
+            "longrange",
+        ]:
+            raise ValueError(
+                f"Invalid combat style: {combat_style}. See function docstring for valid options."
+            )
 
         # Click the combat tab
         self.mouse.move_to(self.win.cp_tabs[0].random_point(), mouseSpeed="fastest")
@@ -840,8 +874,32 @@ class Bot(ABC):
 
         # It is important to keep ambiguous words at the end of the list so that they are matched as a last resort
         styles = {
-            "accurate": ["Accurate", "Short fuse", "Punch", "Chop", "Jab", "Stab", "Spike", "Reap", "Bash", "Flick", "Pound", "Pummel"],
-            "aggressive": ["Kick", "Smash", "Hack", "Swipe", "Slash", "Impale", "Lunge", "Pummel", "Chop", "Pound"],
+            "accurate": [
+                "Accurate",
+                "Short fuse",
+                "Punch",
+                "Chop",
+                "Jab",
+                "Stab",
+                "Spike",
+                "Reap",
+                "Bash",
+                "Flick",
+                "Pound",
+                "Pummel",
+            ],
+            "aggressive": [
+                "Kick",
+                "Smash",
+                "Hack",
+                "Swipe",
+                "Slash",
+                "Impale",
+                "Lunge",
+                "Pummel",
+                "Chop",
+                "Pound",
+            ],
             "defensive": ["Block", "Fend", "Focus", "Deflect"],
             "controlled": ["Spike", "Lash", "Lunge", "Jab"],
             "rapid": [
@@ -856,10 +914,15 @@ class Bot(ABC):
 
         for style in styles[combat_style]:
             # Try and find the center of the word with OCR
-            if result := ocr.find_text(style, self.win.control_panel, ocr.PLAIN_11, clr.OFF_ORANGE):
+            if result := ocr.find_text(
+                style, self.win.control_panel, ocr.PLAIN_11, clr.OFF_ORANGE
+            ):
                 # If the word is found, draw a rectangle around it and click a random point in that rectangle
                 center = result[0].get_center()
-                rect = Rectangle.from_points(Point(center[0] - 32, center[1] - 34), Point(center[0] + 32, center[1] + 10))
+                rect = Rectangle.from_points(
+                    Point(center[0] - 32, center[1] - 34),
+                    Point(center[0] + 32, center[1] + 10),
+                )
                 self.mouse.move_to(rect.random_point(), mouseSpeed="fastest")
                 self.mouse.click()
                 self.log_msg(f"Combat style {combat_style} selected.")
@@ -876,12 +939,16 @@ class Bot(ABC):
         self.log_msg(f"Toggling run {state}...")
 
         if toggle_on:
-            if run_status := imsearch.search_img_in_rect(imsearch.BOT_IMAGES.joinpath("run_off.png"), self.win.run_orb, 0.323):
+            if run_status := imsearch.search_img_in_rect(
+                imsearch.BOT_IMAGES.joinpath("run_off.png"), self.win.run_orb, 0.323
+            ):
                 self.mouse.move_to(run_status.random_point())
                 self.mouse.click()
             else:
                 self.log_msg("Run is already on.")
-        elif run_status := imsearch.search_img_in_rect(imsearch.BOT_IMAGES.joinpath("run_on.png"), self.win.run_orb, 0.323):
+        elif run_status := imsearch.search_img_in_rect(
+            imsearch.BOT_IMAGES.joinpath("run_on.png"), self.win.run_orb, 0.323
+        ):
             self.mouse.move_to(run_status.random_point())
             self.mouse.click()
         else:
@@ -936,15 +1003,13 @@ class Bot(ABC):
         If not available, it returns True (assumes idle).
         """
         # Check if action text area is defined in the window
-        if not hasattr(self.win, 'action_text_area'):
+        if not hasattr(self.win, "action_text_area"):
             # No action text area defined, assume idle
             return True
 
         # Extract text from action area
         action_text = ocr.extract_text(
-            self.win.action_text_area,
-            ocr.PLAIN_11,
-            [clr.WHITE, clr.YELLOW]
+            self.win.action_text_area, ocr.PLAIN_11, [clr.WHITE, clr.YELLOW]
         )
 
         # Player is idle if no action text is present
@@ -967,7 +1032,11 @@ class Bot(ABC):
         found_slots = []
 
         # Clamp to sensible range; default to full image if invalid.
-        if crop_bottom_portion is None or crop_bottom_portion <= 0 or crop_bottom_portion > 1:
+        if (
+            crop_bottom_portion is None
+            or crop_bottom_portion <= 0
+            or crop_bottom_portion > 1
+        ):
             crop_bottom_portion = 1.0
 
         template = cv2.imread(item_template_path, cv2.IMREAD_UNCHANGED)
@@ -979,9 +1048,61 @@ class Bot(ABC):
         for i, slot in enumerate(self.win.inventory_slots):
             slot_img = slot.screenshot()
             slot_cropped = self._crop_bottom_portion(slot_img, crop_bottom_portion)
-            if imsearch.search_img_in_rect(template_cropped, slot_cropped, confidence=confidence):
+            if imsearch.search_img_in_rect(
+                template_cropped, slot_cropped, confidence=confidence
+            ):
                 found_slots.append(i)
         return found_slots
+
+    def find_item_in_bank_visual(
+        self,
+        item_template_path: str,
+        confidence: float = 0.3,
+        crop_bottom_portion: float = 0.7,
+    ) -> Optional[Tuple[Rectangle, int]]:
+        """
+        Find item in bank using template matching with cropping.
+
+        Similar to find_item_in_inventory_visual but for bank slots.
+        Crops bottom portion to avoid item counts/overlays.
+
+        Args:
+            item_template_path: Path to the item template image
+            confidence: Matching confidence threshold (0.0-1.0)
+            crop_bottom_portion: Portion of the slot/template height to compare from the bottom (0.0-1.0)
+
+        Returns:
+            Tuple of (slot_rectangle, slot_index) for first match, or None if not found
+        """
+        if not self.win.bank_slots:
+            self.log_msg("Bank slots not detected, cannot search")
+            return None
+
+        # Clamp to sensible range; default to full image if invalid.
+        if (
+            crop_bottom_portion is None
+            or crop_bottom_portion <= 0
+            or crop_bottom_portion > 1
+        ):
+            crop_bottom_portion = 1.0
+
+        template = cv2.imread(item_template_path, cv2.IMREAD_UNCHANGED)
+        if template is None:
+            raise FileNotFoundError(f"Template not found: {item_template_path}")
+
+        template_cropped = self._crop_bottom_portion(template, crop_bottom_portion)
+
+        for i, slot in enumerate(self.win.bank_slots):
+            slot_img = slot.screenshot()
+            slot_cropped = self._crop_bottom_portion(slot_img, crop_bottom_portion)
+            if imsearch.search_img_in_rect(
+                template_cropped, slot_cropped, confidence=confidence
+            ):
+                self.log_msg(f"Found item in bank slot {i}")
+                return (slot, i)
+
+        self.log_msg("Item not found in any bank slot")
+        return None
 
     @staticmethod
     def _crop_bottom_portion(image: cv2.Mat, portion: float) -> cv2.Mat:

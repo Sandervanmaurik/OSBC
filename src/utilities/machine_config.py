@@ -288,6 +288,23 @@ class MachineConfig:
             },
         )
 
+    def get_bank_config(self) -> Dict[str, int]:
+        """Get bank slot configuration."""
+        return self.get(
+            "ui_coordinates",
+            "bank",
+            default={
+                "slot_width": 36,
+                "slot_height": 32,
+                "gap_x": 12,
+                "gap_y": 6,
+                "start_x": 62,
+                "start_y": 115,
+                "grid_rows": 8,
+                "grid_cols": 8,
+            },
+        )
+
     def get_chat_tabs_config(self) -> Dict[str, Any]:
         """Get chat tabs configuration."""
         return self.get(

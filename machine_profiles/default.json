@@ -247,6 +247,9 @@
     "mouseover": {
       "width": 407,
       "height": 26
+    },
+    "bank": {
+      "note": "Bank slot detection is now fully dynamic via OCR. No hardcoded positions needed."
     }
   },
   "paths": {

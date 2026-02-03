@@ -7,14 +7,26 @@ packages:
     version: 0.0.0
   auto-osbc-multi-agent:
     files:
-      AGENTS.md:
-        - AGENTS.md
-        - CLAUDE.md
       agents/bot-developer.md:
         - .claude/agents/bot-developer.md
         - .cursor/agents/bot-developer.md
         - .factory/droids/bot-developer.md
         - .opencode/agents/bot-developer.md
+      agents/code-architect.md:
+        - .claude/agents/code-architect.md
+        - .cursor/agents/code-architect.md
+        - .factory/droids/code-architect.md
+        - .opencode/agents/code-architect.md
+      agents/code-explorer.md:
+        - .claude/agents/code-explorer.md
+        - .cursor/agents/code-explorer.md
+        - .factory/droids/code-explorer.md
+        - .opencode/agents/code-explorer.md
+      agents/code-reviewer.md:
+        - .claude/agents/code-reviewer.md
+        - .cursor/agents/code-reviewer.md
+        - .factory/droids/code-reviewer.md
+        - .opencode/agents/code-reviewer.md
       agents/senior-developer.md:
         - .claude/agents/senior-developer.md
         - .cursor/agents/senior-developer.md
@@ -30,6 +42,22 @@ packages:
         - .cursor/agents/visual-debugger.md
         - .factory/droids/visual-debugger.md
         - .opencode/agents/visual-debugger.md
+      commands/behavior-validation.md:
+        - .claude/commands/behavior-validation.md
+        - .codex/prompts/behavior-validation.md
+        - .cursor/commands/behavior-validation.md
+        - .factory/commands/behavior-validation.md
+        - .kilocode/workflows/behavior-validation.md
+        - .opencode/commands/behavior-validation.md
+        - .roo/commands/behavior-validation.md
+      commands/feature-dev.md:
+        - .claude/commands/feature-dev.md
+        - .codex/prompts/feature-dev.md
+        - .cursor/commands/feature-dev.md
+        - .factory/commands/feature-dev.md
+        - .kilocode/workflows/feature-dev.md
+        - .opencode/commands/feature-dev.md
+        - .roo/commands/feature-dev.md
       commands/quick-reference.md:
         - .claude/commands/quick-reference.md
         - .codex/prompts/quick-reference.md
@@ -62,6 +90,14 @@ packages:
         - .kilocode/skills/efficient-script-writing.md
         - .opencode/skills/efficient-script-writing.md
         - .roo/skills/efficient-script-writing.md
+      skills/human-behavior-checklist.md:
+        - .claude/skills/human-behavior-checklist.md
+        - .codex/skills/human-behavior-checklist.md
+        - .cursor/skills/human-behavior-checklist.md
+        - .factory/skills/human-behavior-checklist.md
+        - .kilocode/skills/human-behavior-checklist.md
+        - .opencode/skills/human-behavior-checklist.md
+        - .roo/skills/human-behavior-checklist.md
       skills/human-behavior.md:
         - .claude/skills/human-behavior.md
         - .codex/skills/human-behavior.md
@@ -78,7 +114,7 @@ packages:
         - .kilocode/skills/senior-dev-principles.md
         - .opencode/skills/senior-dev-principles.md
         - .roo/skills/senior-dev-principles.md
-    path: ~/.openpackage/registry/auto-osbc-multi-agent/1.0.0/
+    path: ./.openpackage/packages/auto-osbc-multi-agent
     version: 1.0.0
   gh@anthropics/claude-code/plugins/feature-dev:
     files:

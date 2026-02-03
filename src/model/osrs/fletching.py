@@ -5,10 +5,12 @@ from typing import Dict, List, Optional, Tuple
 import utilities.color as clr
 import utilities.imagesearch as imsearch
 import utilities.ocr as ocr
-import utilities.random_util as rd
 from model.bot import BotStatus
 from model.osrs.osrs_bot import OSRSBot
 from utilities.geometry import Rectangle
+
+# === NEW: Import behavior system ===
+from utilities.behavior import BehaviorManager
 
 
 class OSRSFletching(OSRSBot):
@@ -16,6 +18,12 @@ class OSRSFletching(OSRSBot):
     Fletching bot for OSRS.
 
     Current method: headless arrows (combine feathers with arrow shafts).
+
+    MIGRATED TO BEHAVIOR SYSTEM:
+    - Uses BehaviorManager with "focused" profile
+    - Camera and skill checks disabled (standing at bank)
+    - Fast timing behaviors for rapid clicking
+    - Custom break patterns integrated
     """
 
     FLETCHING_METHODS = ["Headless arrows"]
@@ -45,12 +53,44 @@ class OSRSFletching(OSRSBot):
         self._prefer_primary_first = True
         self._order_flip_chance = 0.25
 
+        # Break timing
         self._next_break_at = 0.0
         self._break_min = 2.0
         self._break_max = 12.0
 
+        # Fletching timeouts
         self._attaching_start_timeout = 3.0
         self._attaching_end_timeout = 55.0
+
+        # === NEW: Initialize behavior system ===
+        # Use "focused" profile with customizations for fletching
+        self.behavior = BehaviorManager(
+            bot=self,
+            profile="focused",  # Fast, efficient profile
+            custom_config={
+                "timing": {
+                    "speed_multiplier": 0.8,  # Even faster for fletching
+                },
+                "mouse": {
+                    "default_speed": "fastest",  # Fast clicks for fletching
+                },
+                "action": {
+                    "misclick_chance": 0.03,  # Very low misclick (repetitive task)
+                    "hesitation_chance": 0.05,  # Low hesitation
+                },
+                "attention": {
+                    # Disable attention behaviors - standing at bank
+                    "camera_enabled": False,
+                    "skill_check_enabled": False,
+                    "mouse_movement_enabled": True,  # Keep mouse movements
+                    "mouse_movement_interval": (60.0, 180.0),  # Less frequent
+                    "inventory_check_enabled": False,  # Not needed
+                },
+                "breaks": {
+                    "enabled": False,  # We have custom break logic
+                },
+            },
+        )
 
     def create_options(self) -> None:
         self.options_builder.add_slider_option(
@@ -92,12 +132,16 @@ class OSRSFletching(OSRSBot):
                 if self._should_stop():
                     break
 
+                # === NEW: Use attention behaviors (mouse movement only) ===
+                self.behavior.attention.perform_random_behaviors()
+
                 if self._should_take_break():
                     self._take_break()
 
                 if self.fletching_method == "Headless arrows":
                     if not self._fletch_headless_arrows_cycle():
-                        self._sleep_fast(0.15, 0.4)
+                        # === NEW: Use behavior system for sleep ===
+                        self.behavior.timing.sleep((0.15, 0.4))
                         continue
                 else:
                     self._stop_with_message(
@@ -140,7 +184,8 @@ class OSRSFletching(OSRSBot):
 
         if not self._click_inventory_slot(primary_slot):
             return False
-        self._sleep_fast(0.03, 0.08)
+        # === NEW: Use behavior system for micro-delay ===
+        self.behavior.timing.sleep((0.03, 0.08))
         if not self._click_inventory_slot(secondary_slot):
             return False
 
@@ -189,25 +234,21 @@ class OSRSFletching(OSRSBot):
         slot = self.win.inventory_slots[slot_index]
         try:
             click_point = slot.random_point()
-            self.mouse.move_to(
+            # === NEW: Use behavior system for mouse movement ===
+            # Profile already configured for "fastest" speed
+            self.behavior.mouse.move_to(
                 click_point, mouseSpeed=random.choice(["fastest", "fast", "fastest"])
             )
-            self._sleep_fast(0.02, 0.06)
-            self.mouse.click()
+            # === NEW: Use behavior system for pre-click delay ===
+            self.behavior.timing.sleep((0.02, 0.06))
+            # === NEW: Use behavior system for clicking ===
+            self.behavior.mouse.click()
             return True
         except Exception as exc:
             self.log_msg(f"Inventory click error: {exc}")
             return False
 
-    def _sleep_fast(self, min_seconds: float, max_seconds: float) -> float:
-        delay = rd.truncated_normal_sample(
-            min_seconds,
-            max_seconds,
-            mean=(min_seconds + max_seconds) / 2,
-            std=(max_seconds - min_seconds) / 5,
-        )
-        time.sleep(delay)
-        return delay
+    # === REMOVED: _sleep_fast() - now using behavior.timing.sleep() ===
 
     def _wait_for_attaching_start(self, timeout_seconds: float) -> bool:
         start = time.time()
@@ -216,7 +257,8 @@ class OSRSFletching(OSRSBot):
                 return False
             if self._is_attaching():
                 return True
-            self._sleep_fast(0.08, 0.18)
+            # === NEW: Use behavior system for polling delay ===
+            self.behavior.timing.sleep((0.08, 0.18))
         return False
 
     def _wait_for_attaching_end(self, timeout_seconds: float) -> bool:
@@ -230,11 +272,15 @@ class OSRSFletching(OSRSBot):
             if time.time() - last_log > 6.0:
                 self.log_msg("Attaching... waiting for completion.")
                 last_log = time.time()
-            self._sleep_fast(0.2, 0.6)
+            # === NEW: Use behavior system for polling delay ===
+            self.behavior.timing.sleep((0.2, 0.6))
         self.log_msg("Attaching wait timed out; retrying cycle.")
         return False
 
     def _schedule_next_break(self) -> None:
+        # === NEW: Use behavior system's random utilities ===
+        import utilities.random_util as rd
+
         self._next_break_at = time.time() + rd.truncated_normal_sample(
             25, 70, mean=45, std=10
         )
@@ -243,16 +289,21 @@ class OSRSFletching(OSRSBot):
         return time.time() >= self._next_break_at
 
     def _take_break(self) -> None:
+        # === NEW: Use behavior system for break duration ===
+        import utilities.random_util as rd
+
         break_duration = rd.truncated_normal_sample(
             self._break_min, self._break_max, mean=6.0, std=2.0
         )
         self.log_msg(f"Taking a short break ({break_duration:.1f}s)")
         end_time = time.time() + break_duration
 
+        # Random mouse movements during break
         moves = random.randint(1, 3)
         for _ in range(moves):
             self._random_mouse_movement()
-            self._sleep_fast(0.2, 0.6)
+            # === NEW: Use behavior system for delay ===
+            self.behavior.timing.sleep((0.2, 0.6))
 
         remaining = end_time - time.time()
         if remaining > 0:
@@ -261,6 +312,7 @@ class OSRSFletching(OSRSBot):
         self._schedule_next_break()
 
     def _random_mouse_movement(self) -> None:
+        """Random mouse movement during breaks (uses behavior system)."""
         if not self.win:
             return
         try:
@@ -271,7 +323,8 @@ class OSRSFletching(OSRSBot):
                 point = slot.random_point()
             else:
                 return
-            self.mouse.move_to(
+            # === NEW: Use behavior system for mouse movement ===
+            self.behavior.mouse.move_to(
                 point, mouseSpeed=random.choice(["medium", "fast", "fastest"])
             )
         except Exception as exc:
@@ -279,9 +332,13 @@ class OSRSFletching(OSRSBot):
 
     def _open_inventory_tab(self) -> None:
         if len(self.win.cp_tabs) > 3:
-            self.mouse.move_to(self.win.cp_tabs[3].random_point(), mouseSpeed="fast")
-            self.mouse.click()
-            self._sleep_fast(0.15, 0.35)
+            # === NEW: Use behavior system for mouse movement ===
+            self.behavior.mouse.move_to(
+                self.win.cp_tabs[3].random_point(), mouseSpeed="fast"
+            )
+            self.behavior.mouse.click()
+            # === NEW: Use behavior system for delay ===
+            self.behavior.timing.sleep((0.15, 0.35))
 
     def _ensure_inventory_ready(self) -> bool:
         if not self.win or not self.win.inventory_slots:
@@ -300,11 +357,13 @@ class OSRSFletching(OSRSBot):
         self.set_status(BotStatus.STOPPED)
 
     def _press_space_to_confirm(self) -> bool:
-        self._sleep_fast(0.02, 0.06)
+        # === NEW: Use behavior system for delay ===
+        self.behavior.timing.sleep((0.02, 0.06))
         if not self._safe_key_press("space"):
             self.log_msg("Failed to press space (window focus lost).")
             return False
-        self._sleep_fast(0.03, 0.08)
+        # === NEW: Use behavior system for delay ===
+        self.behavior.timing.sleep((0.03, 0.08))
         return True
 
     def _get_action_text_rect(self) -> Optional[Rectangle]:

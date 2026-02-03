@@ -1,0 +1,120 @@
+name: auto-osbc-multi-agent
+version: 1.0.0
+description: Multi-agent collaboration system for Auto-OSBC bot development with mandatory human-behavior validation
+author: Sandervm
+license: MIT
+tags:
+- multi-agent
+- bot-development
+- game-automation
+- human-behavior
+- code-quality
+readme: README.md
+content:
+  agents:
+  - path: agents/bot-developer.md
+    name: bot-developer
+    description: Expert game automation developer specializing in human-like behavior
+  - path: agents/code-architect.md
+    name: code-architect
+    description: Designs feature architectures by analyzing existing patterns
+  - path: agents/code-explorer.md
+    name: code-explorer
+    description: Deeply analyzes existing codebase features
+  - path: agents/code-reviewer.md
+    name: code-reviewer
+    description: Reviews code for bugs and human-behavior violations
+  - path: agents/senior-developer.md
+    name: senior-developer
+    description: Ensures code quality and separation of concerns
+  - path: agents/visual-debugger.md
+    name: visual-debugger
+    description: Diagnoses and fixes computer vision detection issues
+  - path: agents/test-engineer.md
+    name: test-engineer
+    description: Creates comprehensive tests following TDD principles
+  commands:
+  - path: commands/multi-agent.md
+    name: multi
+    description: Activate comprehensive multi-agent collaboration
+  - path: commands/behavior-validation.md
+    name: behavior-validation
+    description: Automated human-behavior validation rules
+  - path: commands/quick-reference.md
+    name: quick-reference
+    description: Quick command reference
+  - path: commands/senior-dev-checklist.md
+    name: senior-dev-checklist
+    description: Senior developer review checklist
+  skills:
+  - path: skills/human-behavior.md
+    name: human-behavior
+    description: Patterns for undetectable automation
+  - path: skills/human-behavior-checklist.md
+    name: human-behavior-checklist
+    description: Comprehensive validation checklist for all agents
+  - path: skills/bot-creation.md
+    name: bot-creation
+    description: Step-by-step bot development workflow
+  - path: skills/senior-dev-principles.md
+    name: senior-dev-principles
+    description: Simple, readable, maintainable code practices
+  workflows:
+  - path: workflows/multi-bot-creation.md
+    name: multi-bot-creation
+    description: Complete workflow for creating new bots with /multi
+  - path: workflows/multi-feature-addition.md
+    name: multi-feature-addition
+    description: Workflow for adding features to existing bots
+  - path: workflows/multi-debugging.md
+    name: multi-debugging
+    description: Targeted debugging workflow with multi-agent
+  examples:
+  - path: examples/multi-agent-bot-creation.md
+    name: bot-creation-example
+    description: Complete fishing bot creation with dialogue
+  - path: examples/multi-agent-debugging.md
+    name: debugging-example
+    description: Tree detection debugging with dialogue
+  root:
+  - path: root/AGENTS.md
+    name: AGENTS
+    description: Complete multi-agent system documentation
+  - path: root/CLAUDE.md
+    name: CLAUDE
+    description: Main AI agent development roadmap
+platforms:
+  claude:
+    enabled: true
+    config:
+      base_path: .claude
+  opencode:
+    enabled: true
+    config:
+      base_path: .openpackage/packages/auto-osbc-multi-agent
+dependencies: []
+entry_points:
+  main: root/AGENTS.md
+  quick_start: commands/multi-agent.md
+features:
+- name: Multi-Agent Coordination
+  description: 7 specialized agents working together in hybrid mode
+- name: Human-Behavior Validation
+  description: Mandatory checklists at every stage to ensure undetectable bots
+- name: Automated Code Review
+  description: Regex-based violation detection with confidence scoring
+- name: Hybrid Execution
+  description: Parallel + sequential stages for optimal performance
+- name: Interactive Dialogue
+  description: Concise agent communication with emoji identifiers
+changelog:
+- version: 1.0.0
+  date: 2025-02-02T00:00:00.000Z
+  changes:
+  - Initial release
+  - 7 specialized agents with multi-agent mode
+  - Comprehensive human-behavior validation system
+  - Automated violation detection
+  - Complete workflows and examples
+keywords: [multi-agent, bot, bot-development]
+private: true
