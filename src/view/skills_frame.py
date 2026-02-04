@@ -32,6 +32,7 @@ class SkillsFrame(customtkinter.CTkFrame):
         self.skill_value_labels = []
         self.skill_freshness_dots = {}  # skill_name -> canvas item ID
         self.skill_progress_bars = {}  # skill_name -> canvas item ID
+        self.skill_remaining_xp_labels = {}  # skill_name -> canvas item ID
         self.skill_tooltips = {}  # skill_name -> tooltip text
 
         # Configure grid layout (8 rows, 3 columns for skills, plus title row)
@@ -89,31 +90,34 @@ class SkillsFrame(customtkinter.CTkFrame):
             row = (i // 3) + 1  # Start from row 1 (row 0 is title)
             col = i % 3
 
-            # Create container frame
-            container = customtkinter.CTkFrame(master=self, fg_color=self._fg_color)
-            container.grid(row=row, column=col, padx=4, pady=2, sticky="nsew")
+            # Create container frame with rounded corners
+            container = customtkinter.CTkFrame(
+                master=self, 
+                fg_color="#1E1E1E",  # Match canvas background
+                corner_radius=6  # Rounded corners
+            )
+            container.grid(row=row, column=col, padx=5, pady=3, sticky="nsew")
 
             # Create canvas for custom drawing (progress bar, freshness dot)
-            # Use a slightly lighter background than the frame
             cell_canvas = tkinter.Canvas(
                 container,
-                width=60,
-                height=26,
+                width=70,
+                height=36,
                 bg="#1E1E1E",  # Very dark gray background
                 highlightthickness=0,
             )
-            cell_canvas.pack(fill="both", expand=True)
+            cell_canvas.pack(fill="both", expand=True, padx=1, pady=1)
             self.skill_cells[name] = cell_canvas
 
-            # Draw skill icon on the left
+            # Draw skill icon on the left (centered vertically between level and remaining XP)
             icon = self.skill_images.get(name)
             if icon:
-                cell_canvas.create_image(4, 13, image=icon, anchor="w")
+                cell_canvas.create_image(6, 18, image=icon, anchor="w")
 
-            # Draw skill value text to the right of the icon
+            # Draw skill value text to the right of the icon (upper area)
             value_text_id = cell_canvas.create_text(
-                28,
-                13,
+                32,
+                12,
                 text="--",
                 font=("Consolas", 10, "bold"),
                 anchor="w",
@@ -128,6 +132,17 @@ class SkillsFrame(customtkinter.CTkFrame):
             # Create progress bar (hidden by default)
             bar_id = cell_canvas.create_rectangle(0, 0, 0, 0, fill="", outline="")
             self.skill_progress_bars[name] = bar_id
+
+            # Create remaining XP label (hidden by default, smaller text below the level)
+            remaining_xp_id = cell_canvas.create_text(
+                32,
+                24,
+                text="",
+                font=("Consolas", 7),
+                anchor="w",
+                fill="#888888",  # Dimmed gray text
+            )
+            self.skill_remaining_xp_labels[name] = remaining_xp_id
 
             # Bind hover events for tooltip
             cell_canvas.bind("<Enter>", lambda e, s=name: self._show_tooltip(e, s))
@@ -194,6 +209,9 @@ class SkillsFrame(customtkinter.CTkFrame):
                 # Update progress bar (only if we have XP data)
                 self._update_progress_bar(skill_name, skill_state)
 
+                # Update remaining XP label (only if we have XP data)
+                self._update_remaining_xp_label(skill_name, skill_state)
+
                 # Update freshness dot
                 self._update_freshness_dot(skill_name, skill_state)
 
@@ -224,8 +242,8 @@ class SkillsFrame(customtkinter.CTkFrame):
             progress = ExperienceTable().progress_to_next_level(skill_state.xp)
 
             # Get canvas dimensions (use fixed width since we set it)
-            canvas_width = 60  # Fixed width we set in _create_skill_cells
-            canvas_height = 26  # Fixed height we set
+            canvas_width = 70  # Fixed width we set in _create_skill_cells
+            canvas_height = 36  # Fixed height we set (increased from 28 to 36)
 
             # Draw progress bar at bottom (3px tall, blue)
             bar_width = int(canvas_width * progress)
@@ -235,6 +253,40 @@ class SkillsFrame(customtkinter.CTkFrame):
             # Hide progress bar (no XP data, level 99, or unread)
             canvas.coords(bar_id, 0, 0, 0, 0)
             canvas.itemconfig(bar_id, fill="", outline="")
+
+    def _update_remaining_xp_label(self, skill_name: str, skill_state):
+        """Show or hide the remaining XP label based on XP data."""
+        canvas = self.skill_cells.get(skill_name)
+        label_id = self.skill_remaining_xp_labels.get(skill_name)
+
+        if not canvas or label_id is None:
+            return
+
+        if (
+            skill_state.has_xp_data()
+            and skill_state.level < 99
+            and skill_state.level > 0
+        ):
+            # Calculate remaining XP to next level
+            current_level = skill_state.level
+            next_level_xp = ExperienceTable().level_to_xp(current_level + 1)
+            remaining_xp = next_level_xp - skill_state.xp
+
+            # Format remaining XP (use k/m suffix for large numbers)
+            if remaining_xp >= 1_000_000:
+                xp_text = f"{remaining_xp / 1_000_000:.1f}m"
+            elif remaining_xp >= 10_000:
+                xp_text = f"{remaining_xp / 1_000:.0f}k"
+            elif remaining_xp >= 1_000:
+                xp_text = f"{remaining_xp / 1_000:.1f}k"
+            else:
+                xp_text = str(remaining_xp)
+
+            # Update label text
+            canvas.itemconfig(label_id, text=xp_text)
+        else:
+            # Hide label (no XP data, level 99, or unread)
+            canvas.itemconfig(label_id, text="")
 
     def _update_freshness_dot(self, skill_name: str, skill_state):
         """Draw the freshness indicator dot in the top-right corner."""
@@ -262,12 +314,12 @@ class SkillsFrame(customtkinter.CTkFrame):
             color = "#9E9E9E"  # Gray
 
         # Get canvas dimensions (use fixed width)
-        canvas_width = 60  # Fixed width we set
+        canvas_width = 70  # Fixed width we set
 
         # Draw dot in top-right corner (5px diameter)
         dot_size = 5
-        x = canvas_width - dot_size - 3
-        y = 3
+        x = canvas_width - dot_size - 4
+        y = 4
         canvas.coords(dot_id, x, y, x + dot_size, y + dot_size)
         canvas.itemconfig(dot_id, fill=color, outline="")
 
@@ -341,3 +393,8 @@ class SkillsFrame(customtkinter.CTkFrame):
             if dot_id:
                 canvas.coords(dot_id, 0, 0, 0, 0)
                 canvas.itemconfig(dot_id, fill="", outline="")
+
+            # Hide remaining XP label
+            remaining_xp_id = self.skill_remaining_xp_labels.get(skill_name)
+            if remaining_xp_id:
+                canvas.itemconfig(remaining_xp_id, text="")
