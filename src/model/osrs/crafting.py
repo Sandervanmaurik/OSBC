@@ -270,31 +270,41 @@ class OSRSCrafting(OSRSBot):
     def _craft_gems(self, tool_slots: List[int], input_slots: List[int]) -> bool:
         """
         Craft gems by using tool on input item.
+
+        NOTE: Pauses fidgeting during the entire item interaction sequence
+        to prevent mouse movement from interrupting the "use item on item" action.
         """
-        # Randomly flip item click order
-        if random.random() < self._order_flip_chance:
-            self._prefer_chisel_first = not self._prefer_chisel_first
+        # Pause fidgeting for the entire crafting action sequence
+        self.behavior.pause_fidgeting()
 
-        if self._prefer_chisel_first:
-            primary_slots, secondary_slots = tool_slots, input_slots
-        else:
-            primary_slots, secondary_slots = input_slots, tool_slots
+        try:
+            # Randomly flip item click order
+            if random.random() < self._order_flip_chance:
+                self._prefer_chisel_first = not self._prefer_chisel_first
 
-        # Pick random slots
-        primary_slot = random.choice(primary_slots)
-        secondary_slot = random.choice(secondary_slots)
+            if self._prefer_chisel_first:
+                primary_slots, secondary_slots = tool_slots, input_slots
+            else:
+                primary_slots, secondary_slots = input_slots, tool_slots
 
-        # Click items
-        if not self._click_inventory_slot(primary_slot):
-            return False
-        # === Use behavior system for micro-delay ===
-        self.behavior.timing.sleep((0.03, 0.08))
-        if not self._click_inventory_slot(secondary_slot):
-            return False
+            # Pick random slots
+            primary_slot = random.choice(primary_slots)
+            secondary_slot = random.choice(secondary_slots)
 
-        # Press spacebar with randomized delay
-        if not self._press_space_to_confirm():
-            return False
+            # Click items
+            if not self._click_inventory_slot(primary_slot):
+                return False
+            # === Use behavior system for micro-delay ===
+            self.behavior.timing.sleep((0.03, 0.08))
+            if not self._click_inventory_slot(secondary_slot):
+                return False
+
+            # Press spacebar with randomized delay
+            if not self._press_space_to_confirm():
+                return False
+        finally:
+            # Resume fidgeting after item interaction is complete
+            self.behavior.resume_fidgeting()
 
         # Wait for "Cutting" to start
         if not self._wait_for_cutting_start(

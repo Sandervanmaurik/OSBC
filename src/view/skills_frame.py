@@ -51,7 +51,7 @@ class SkillsFrame(customtkinter.CTkFrame):
             justify=tkinter.LEFT,
         )
         self.lbl_title.grid(
-            row=0, column=0, columnspan=3, sticky="wns", padx=15, pady=(15, 5)
+            row=0, column=0, columnspan=3, sticky="wns", padx=10, pady=(10, 5)
         )
 
         # Load skill icons
@@ -92,9 +92,9 @@ class SkillsFrame(customtkinter.CTkFrame):
 
             # Create container frame with rounded corners
             container = customtkinter.CTkFrame(
-                master=self, 
+                master=self,
                 fg_color="#1E1E1E",  # Match canvas background
-                corner_radius=6  # Rounded corners
+                corner_radius=6,  # Rounded corners
             )
             container.grid(row=row, column=col, padx=5, pady=3, sticky="nsew")
 

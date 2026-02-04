@@ -27,7 +27,7 @@ class BehaviorFrame(customtkinter.CTkFrame):
             font=subheading_font(),
             justify=tkinter.LEFT,
         )
-        self.lbl_title.grid(row=0, column=0, sticky="wns", padx=15, pady=(15, 5))
+        self.lbl_title.grid(row=0, column=0, sticky="wns", padx=10, pady=(10, 5))
 
         # Setting labels (7 key settings)
         self.setting_labels = []
@@ -43,7 +43,7 @@ class BehaviorFrame(customtkinter.CTkFrame):
 
         for i, name in enumerate(setting_names, start=1):
             row_frame = customtkinter.CTkFrame(master=self, fg_color=self._fg_color)
-            row_frame.grid(row=i, column=0, padx=15, pady=2, sticky="ew")
+            row_frame.grid(row=i, column=0, padx=10, pady=2, sticky="ew")
             row_frame.columnconfigure(0, weight=0)
             row_frame.columnconfigure(1, weight=1)
 

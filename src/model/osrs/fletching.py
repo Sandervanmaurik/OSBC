@@ -176,7 +176,6 @@ class OSRSFletching(OSRSBot):
             self.set_status(BotStatus.STOPPED)
 
     def _fletch_headless_arrows_cycle(self) -> bool:
-        
         feather_slots, shaft_slots = self._find_fletching_slots()
         if not feather_slots or not shaft_slots:
             self._missing_item_cycles += 1
@@ -192,26 +191,34 @@ class OSRSFletching(OSRSBot):
 
         self._missing_item_cycles = 0
 
-        if random.random() < self._order_flip_chance:
-            self._prefer_primary_first = not self._prefer_primary_first
+        # Pause fidgeting for the entire item interaction sequence
+        # to prevent mouse movement from interrupting the "use item on item" action
+        self.behavior.pause_fidgeting()
 
-        if self._prefer_primary_first:
-            primary_slots, secondary_slots = feather_slots, shaft_slots
-        else:
-            primary_slots, secondary_slots = shaft_slots, feather_slots
+        try:
+            if random.random() < self._order_flip_chance:
+                self._prefer_primary_first = not self._prefer_primary_first
 
-        primary_slot = random.choice(primary_slots)
-        secondary_slot = random.choice(secondary_slots)
+            if self._prefer_primary_first:
+                primary_slots, secondary_slots = feather_slots, shaft_slots
+            else:
+                primary_slots, secondary_slots = shaft_slots, feather_slots
 
-        if not self._click_inventory_slot(primary_slot):
-            return False
-        # === NEW: Use behavior system for micro-delay ===
-        self.behavior.timing.sleep((0.03, 0.08))
-        if not self._click_inventory_slot(secondary_slot):
-            return False
+            primary_slot = random.choice(primary_slots)
+            secondary_slot = random.choice(secondary_slots)
 
-        if not self._press_space_to_confirm():
-            return False
+            if not self._click_inventory_slot(primary_slot):
+                return False
+            # === NEW: Use behavior system for micro-delay ===
+            self.behavior.timing.sleep((0.03, 0.08))
+            if not self._click_inventory_slot(secondary_slot):
+                return False
+
+            if not self._press_space_to_confirm():
+                return False
+        finally:
+            # Resume fidgeting after item interaction is complete
+            self.behavior.resume_fidgeting()
 
         if not self._wait_for_attaching_start(
             timeout_seconds=self._attaching_start_timeout
