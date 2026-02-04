@@ -1,10 +1,12 @@
 import pathlib
-from typing import Dict
+from datetime import datetime
+from typing import Dict, Optional
 import tkinter
 
 import customtkinter
 from PIL import Image, ImageTk
 
+from model.skills import SkillsManager, ExperienceTable
 from utilities.osrs_skills import skill_names
 from view.fonts.fonts import *
 
@@ -14,11 +16,23 @@ class SkillsFrame(customtkinter.CTkFrame):
         """
         Creates a frame displaying OSRS skill levels in a 3x8 grid.
         Skills data persists across bot switches.
+
+        Features:
+        - Progress bars showing XP progress to next level
+        - Colored dots indicating data freshness (green/yellow/gray)
+        - Hover tooltips with detailed XP information
         """
         super().__init__(parent)
 
         # Store current skills data for persistence
         self.current_skills_data: Dict[str, int] = {}
+
+        # Store UI elements for each skill
+        self.skill_cells: Dict[str, tkinter.Canvas] = {}
+        self.skill_value_labels = []
+        self.skill_freshness_dots = {}  # skill_name -> canvas item ID
+        self.skill_progress_bars = {}  # skill_name -> canvas item ID
+        self.skill_tooltips = {}  # skill_name -> tooltip text
 
         # Configure grid layout (8 rows, 3 columns for skills, plus title row)
         # All rows should have weight=0 to prevent expansion and show all content
@@ -56,30 +70,85 @@ class SkillsFrame(customtkinter.CTkFrame):
             canvas.paste(icon, offset, icon)
             self.skill_images[name] = ImageTk.PhotoImage(canvas)
 
-        # Create skill labels in 3x8 grid
-        self.skill_value_labels = []
+        # Create skill cells in 3x8 grid
+        self._create_skill_cells()
+
+        # Subscribe to SkillsManager for automatic updates
+        SkillsManager().add_observer(self._on_skills_updated)
+
+        # Start periodic UI refresh for freshness indicators
+        self._refresh_timer_id = None
+        self._schedule_refresh()
+
+        # Initial UI update to show current skill states
+        self.update_skills_from_manager()
+
+    def _create_skill_cells(self):
+        """Create the skill display cells with progress bars and indicators."""
         for i, name in enumerate(skill_names()):
             row = (i // 3) + 1  # Start from row 1 (row 0 is title)
             col = i % 3
 
-            cell = customtkinter.CTkFrame(master=self, fg_color=self._fg_color)
-            cell.grid(row=row, column=col, padx=4, pady=2, sticky="nsew")
-            cell.rowconfigure(0, weight=1)
-            cell.columnconfigure(0, weight=0)
-            cell.columnconfigure(1, weight=1)
+            # Create container frame
+            container = customtkinter.CTkFrame(master=self, fg_color=self._fg_color)
+            container.grid(row=row, column=col, padx=4, pady=2, sticky="nsew")
 
-            icon = self.skill_images.get(name)
-            icon_label = customtkinter.CTkLabel(master=cell, image=icon, text="")
-            icon_label.grid(row=0, column=0, padx=(2, 4), pady=1, sticky="w")
-
-            value_label = customtkinter.CTkLabel(
-                master=cell,
-                text="--",
-                font=log_font(12),
-                justify=tkinter.LEFT,
+            # Create canvas for custom drawing (progress bar, freshness dot)
+            # Use a slightly lighter background than the frame
+            cell_canvas = tkinter.Canvas(
+                container,
+                width=60,
+                height=26,
+                bg="#1E1E1E",  # Very dark gray background
+                highlightthickness=0,
             )
-            value_label.grid(row=0, column=1, padx=(0, 2), pady=1, sticky="w")
-            self.skill_value_labels.append(value_label)
+            cell_canvas.pack(fill="both", expand=True)
+            self.skill_cells[name] = cell_canvas
+
+            # Draw skill icon on the left
+            icon = self.skill_images.get(name)
+            if icon:
+                cell_canvas.create_image(4, 13, image=icon, anchor="w")
+
+            # Draw skill value text to the right of the icon
+            value_text_id = cell_canvas.create_text(
+                28,
+                13,
+                text="--",
+                font=("Consolas", 10, "bold"),
+                anchor="w",
+                fill="#DCE4EE",  # Light gray/white text
+            )
+            self.skill_value_labels.append((name, cell_canvas, value_text_id))
+
+            # Create freshness indicator (hidden by default)
+            dot_id = cell_canvas.create_oval(0, 0, 0, 0, fill="", outline="")
+            self.skill_freshness_dots[name] = dot_id
+
+            # Create progress bar (hidden by default)
+            bar_id = cell_canvas.create_rectangle(0, 0, 0, 0, fill="", outline="")
+            self.skill_progress_bars[name] = bar_id
+
+            # Bind hover events for tooltip
+            cell_canvas.bind("<Enter>", lambda e, s=name: self._show_tooltip(e, s))
+            cell_canvas.bind("<Leave>", lambda e: self._hide_tooltip())
+
+    def _on_skills_updated(self):
+        """Callback when SkillsManager notifies of skill changes."""
+        self.update_skills_from_manager()
+
+    def _schedule_refresh(self):
+        """Schedule periodic UI refresh for freshness indicators."""
+        self.update_freshness_indicators()
+        # Refresh every 5 seconds to update dot colors
+        self._refresh_timer_id = self.after(5000, self._schedule_refresh)
+
+    def destroy(self):
+        """Clean up when frame is destroyed."""
+        if self._refresh_timer_id:
+            self.after_cancel(self._refresh_timer_id)
+        SkillsManager().remove_observer(self._on_skills_updated)
+        super().destroy()
 
     def update_skills(self, skill_data):
         """
@@ -93,13 +162,163 @@ class SkillsFrame(customtkinter.CTkFrame):
         # Update stored data
         self.current_skills_data.update(skill_data)
 
-        # Update display
-        for idx, name in enumerate(skill_names()):
-            if idx >= len(self.skill_value_labels):
-                break
-            level = self.current_skills_data.get(name, -1)
-            text = "?" if level < 0 else str(level)
-            self.skill_value_labels[idx].configure(text=text)
+        # Update SkillsManager with level data (this will trigger observers)
+        for skill_name, level in skill_data.items():
+            try:
+                SkillsManager().update_skill_level(skill_name, level)
+            except (ValueError, KeyError) as e:
+                # Skip invalid skill names or levels
+                continue
+
+        # Force immediate UI update (observer may be delayed)
+        self.update_skills_from_manager()
+
+    def update_skills_from_manager(self):
+        """Update the UI from SkillsManager data (called by observer)."""
+        manager = SkillsManager()
+
+        for skill_name, canvas, text_id in self.skill_value_labels:
+            try:
+                skill_state = manager.get_skill(skill_name)
+
+                # Update level text (show -- for -1, ? for 0, or the actual level)
+                if skill_state.level < 0:
+                    level_text = "--"
+                elif skill_state.level == 0:
+                    level_text = "?"
+                else:
+                    level_text = str(skill_state.level)
+
+                canvas.itemconfig(text_id, text=level_text)
+
+                # Update progress bar (only if we have XP data)
+                self._update_progress_bar(skill_name, skill_state)
+
+                # Update freshness dot
+                self._update_freshness_dot(skill_name, skill_state)
+
+                # Update tooltip data
+                self._update_tooltip(skill_name, skill_state)
+
+            except (ValueError, KeyError) as e:
+                # Skill not found, skip
+                continue
+            except Exception as e:
+                # Unexpected error, skip
+                continue
+
+    def _update_progress_bar(self, skill_name: str, skill_state):
+        """Draw or hide the progress bar based on XP data."""
+        canvas = self.skill_cells.get(skill_name)
+        bar_id = self.skill_progress_bars.get(skill_name)
+
+        if not canvas or bar_id is None:
+            return
+
+        if (
+            skill_state.has_xp_data()
+            and skill_state.level < 99
+            and skill_state.level > 0
+        ):
+            # Calculate progress
+            progress = ExperienceTable().progress_to_next_level(skill_state.xp)
+
+            # Get canvas dimensions (use fixed width since we set it)
+            canvas_width = 60  # Fixed width we set in _create_skill_cells
+            canvas_height = 26  # Fixed height we set
+
+            # Draw progress bar at bottom (3px tall, blue)
+            bar_width = int(canvas_width * progress)
+            canvas.coords(bar_id, 0, canvas_height - 3, bar_width, canvas_height)
+            canvas.itemconfig(bar_id, fill="#4A90E2", outline="")
+        else:
+            # Hide progress bar (no XP data, level 99, or unread)
+            canvas.coords(bar_id, 0, 0, 0, 0)
+            canvas.itemconfig(bar_id, fill="", outline="")
+
+    def _update_freshness_dot(self, skill_name: str, skill_state):
+        """Draw the freshness indicator dot in the top-right corner."""
+        canvas = self.skill_cells.get(skill_name)
+        dot_id = self.skill_freshness_dots.get(skill_name)
+
+        if not canvas or dot_id is None:
+            return
+
+        # Don't show dot if skill hasn't been read yet
+        if skill_state.level < 0:
+            canvas.coords(dot_id, 0, 0, 0, 0)
+            canvas.itemconfig(dot_id, fill="", outline="")
+            return
+
+        # Calculate age of data
+        age_seconds = (datetime.now() - skill_state.timestamp).total_seconds()
+
+        # Determine color based on freshness
+        if age_seconds < 10:
+            color = "#4CAF50"  # Green
+        elif age_seconds < 60:
+            color = "#FFC107"  # Yellow
+        else:
+            color = "#9E9E9E"  # Gray
+
+        # Get canvas dimensions (use fixed width)
+        canvas_width = 60  # Fixed width we set
+
+        # Draw dot in top-right corner (5px diameter)
+        dot_size = 5
+        x = canvas_width - dot_size - 3
+        y = 3
+        canvas.coords(dot_id, x, y, x + dot_size, y + dot_size)
+        canvas.itemconfig(dot_id, fill=color, outline="")
+
+    def update_freshness_indicators(self):
+        """Update all freshness dots (called periodically)."""
+        manager = SkillsManager()
+        for skill_name in skill_names():
+            try:
+                skill_state = manager.get_skill(skill_name)
+                self._update_freshness_dot(skill_name, skill_state)
+            except (ValueError, KeyError):
+                continue
+
+    def _update_tooltip(self, skill_name: str, skill_state):
+        """Update the tooltip text for a skill."""
+        if skill_state.has_xp_data():
+            next_level_xp = ExperienceTable().xp_to_next_level(skill_state.xp)
+            tooltip = f"{skill_state.xp:,} / {next_level_xp:,} XP (XP gained: {skill_state.xp_gained:,})"
+            self.skill_tooltips[skill_name] = tooltip
+        else:
+            self.skill_tooltips[skill_name] = None
+
+    def _show_tooltip(self, event, skill_name: str):
+        """Show tooltip on hover."""
+        tooltip_text = self.skill_tooltips.get(skill_name)
+        if not tooltip_text:
+            return
+
+        # Create tooltip window
+        if hasattr(self, "_tooltip_window") and self._tooltip_window:
+            self._tooltip_window.destroy()
+
+        self._tooltip_window = tkinter.Toplevel(self)
+        self._tooltip_window.wm_overrideredirect(True)
+        self._tooltip_window.wm_geometry(f"+{event.x_root + 10}+{event.y_root + 10}")
+
+        label = tkinter.Label(
+            self._tooltip_window,
+            text=tooltip_text,
+            background="#FFFFE0",
+            relief="solid",
+            borderwidth=1,
+            font=("Arial", 9),
+        )
+        label.pack()
+
+    def _hide_tooltip(self):
+        """Hide tooltip."""
+        if hasattr(self, "_tooltip_window") and self._tooltip_window:
+            self._tooltip_window.destroy()
+            self._tooltip_window = None
 
     def reset_skills(self):
         """
@@ -107,5 +326,18 @@ class SkillsFrame(customtkinter.CTkFrame):
         Only call this when explicitly needed (e.g., closing all bots).
         """
         self.current_skills_data.clear()
-        for lbl in self.skill_value_labels:
-            lbl.configure(text="--")
+
+        # Reset UI display
+        for skill_name, canvas, text_id in self.skill_value_labels:
+            canvas.itemconfig(text_id, text="--")
+
+            # Hide progress bars and dots
+            bar_id = self.skill_progress_bars.get(skill_name)
+            if bar_id:
+                canvas.coords(bar_id, 0, 0, 0, 0)
+                canvas.itemconfig(bar_id, fill="", outline="")
+
+            dot_id = self.skill_freshness_dots.get(skill_name)
+            if dot_id:
+                canvas.coords(dot_id, 0, 0, 0, 0)
+                canvas.itemconfig(dot_id, fill="", outline="")

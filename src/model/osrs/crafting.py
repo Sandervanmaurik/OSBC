@@ -430,6 +430,8 @@ class OSRSCrafting(OSRSBot):
                 return True
             if time.time() - last_log > 6.0:
                 self.log_msg("Cutting... waiting for completion.")
+                if self.check_xp_watcher():
+                    self.log_msg("XP gained!")
                 last_log = time.time()
             # === Use behavior system for polling delay ===
             self.behavior.timing.sleep((0.2, 0.6))

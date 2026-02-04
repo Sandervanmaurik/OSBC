@@ -176,6 +176,7 @@ class OSRSFletching(OSRSBot):
             self.set_status(BotStatus.STOPPED)
 
     def _fletch_headless_arrows_cycle(self) -> bool:
+        
         feather_slots, shaft_slots = self._find_fletching_slots()
         if not feather_slots or not shaft_slots:
             self._missing_item_cycles += 1
@@ -291,6 +292,8 @@ class OSRSFletching(OSRSBot):
                 return True
             if time.time() - last_log > 6.0:
                 self.log_msg("Attaching... waiting for completion.")
+                if self.check_xp_watcher():
+                    self.log_msg("XP gained!")
                 last_log = time.time()
             # === NEW: Use behavior system for polling delay ===
             self.behavior.timing.sleep((0.2, 0.6))
