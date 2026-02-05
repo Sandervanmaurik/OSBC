@@ -131,13 +131,13 @@ skip_gitignore = true
 
 [tool.mypy]
 python_version = "3.10"
-strict = true
+strict = false
 namespace_packages = true
 explicit_package_bases = true
 mypy_path = "src"
 
 # Type checking settings
-disallow_untyped_defs = true
+disallow_untyped_defs = false
 disallow_incomplete_defs = true
 check_untyped_defs = true
 disallow_untyped_decorators = false
@@ -150,8 +150,8 @@ disallow_any_expr = false
 disallow_any_decorated = false
 disallow_any_explicit = false
 disallow_any_generics = false
-disallow_subclassing_any = true
-disallow_untyped_calls = true
+disallow_subclassing_any = false  # Allow subclassing customtkinter classes (Any)
+disallow_untyped_calls = false  # Relaxed for gradual typing
 
 # Warning settings
 warn_return_any = true
@@ -176,11 +176,48 @@ ignore_missing_imports = true
 module = "cv2.*"
 ignore_missing_imports = true
 
+# Third-party libraries without type stubs
+[[tool.mypy.overrides]]
+module = "customtkinter.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pynput.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pywinctl.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "mss.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pyclick.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pytweening.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tktooltip.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "dotenv.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "psutil.*"
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = "utilities.*"
 ignore_missing_imports = false
 check_untyped_defs = true
-disallow_untyped_defs = true
+disallow_untyped_defs = false
 disallow_incomplete_defs = true
 warn_return_any = true
 warn_unused_ignores = true

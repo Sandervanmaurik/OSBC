@@ -43,12 +43,10 @@ class App(customtkinter.CTk):
                 pathlib.Path(__file__).parent.resolve().joinpath("images", "ui")
             )
             self.img_rocket = ImageTk.PhotoImage(
-                Image.open(ui_images_path.joinpath("rocket.png")).resize((12, 12)),
-                Image.Resampling.LANCZOS,
+                Image.open(ui_images_path.joinpath("rocket.png")).resize((12, 12), Image.Resampling.LANCZOS)
             )
             self.img_settings = ImageTk.PhotoImage(
-                Image.open(ui_images_path.joinpath("options.png")).resize((12, 12)),
-                Image.Resampling.LANCZOS,
+                Image.open(ui_images_path.joinpath("options.png")).resize((12, 12), Image.Resampling.LANCZOS)
             )
             self.build_ui()
 
@@ -210,7 +208,7 @@ class App(customtkinter.CTk):
             self.__on_game_selector_change("OSRS")
 
     # ============ UI Creation Helpers ============
-    def __create_button(self, bot_key: str, launchable: bool = False):
+    def __create_button(self, bot_key: str, launchable: bool = False) -> customtkinter.CTkButton:
         """
         Creates a preconfigured button for the bot.
         Args:
@@ -255,7 +253,7 @@ class App(customtkinter.CTk):
 
         return btn
 
-    def toggle_btn_state(self, enabled: bool):
+    def toggle_btn_state(self, enabled: bool) -> None:
         """
         Toggles the state of the buttons in the current button list.
         Args:
@@ -277,6 +275,7 @@ class App(customtkinter.CTk):
         keybind = settings.get("keybind")
         if keybind is None:
             settings.set("keybind", settings.default_keybind)
+           
 
     # ============ Button Handlers ============
     def __on_settings_clicked(self):
@@ -327,7 +326,7 @@ class App(customtkinter.CTk):
         )
         self.toggle_btn_state(enabled=False)
 
-    def __toggle_bot_by_key(self, bot_key, btn: customtkinter.CTkButton):
+    def __toggle_bot_by_key(self, bot_key: keyboard.Key, btn: customtkinter.CTkButton) -> None:
         # sourcery skip: extract-method
         """
         Handles the event of the user selecting a bot from the dropdown menu. This function manages the state of frame_left buttons,
@@ -385,7 +384,7 @@ class App(customtkinter.CTk):
         self.mainloop()
 
     # ============ UI-less Test Functions ============
-    def test(self, bot: Bot):
+    def test(self, bot: Bot) -> None:
         bot.set_controller(MockBotController(bot))
         bot.options_set = True
         self.listener = keyboard.Listener(
@@ -396,7 +395,7 @@ class App(customtkinter.CTk):
         bot.play()
         self.listener.join()
 
-    def __on_press(self, key, bot: Bot):
+    def __on_press(self, key: keyboard.Key, bot: Bot) -> None:
         if key == keyboard.Key.ctrl_l:
             bot.thread.stop()
             self.listener.stop()

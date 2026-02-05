@@ -65,7 +65,7 @@ class SkillsFrame(customtkinter.CTkFrame):
             if not icon_file.exists():
                 continue
             icon = Image.open(icon_file).convert("RGBA")
-            icon.thumbnail((icon_size, icon_size), Image.LANCZOS)
+            icon.thumbnail((icon_size, icon_size), Image.Resampling.LANCZOS)
             canvas = Image.new("RGBA", (icon_size, icon_size), (0, 0, 0, 0))
             offset = ((icon_size - icon.width) // 2, (icon_size - icon.height) // 2)
             canvas.paste(icon, offset, icon)

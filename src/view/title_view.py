@@ -28,19 +28,31 @@ class TitleView(customtkinter.CTkFrame):
         # Logo
         self.logo_path = pathlib.Path(__file__).parent.parent.resolve()
         self.logo = ImageTk.PhotoImage(
-            Image.open(f"{self.logo_path}/images/ui/logo.png").resize((411, 64), Image.LANCZOS)
+            Image.open(f"{self.logo_path}/images/ui/logo.png").resize(
+                (411, 64), Image.Resampling.LANCZOS
+            )
         )
-        self.label_logo = customtkinter.CTkLabel(self, image=self.logo, text="", font=body_med_font())
-        self.label_logo.grid(row=1, column=0, columnspan=3, sticky="nsew", padx=15, pady=15)
+        self.label_logo = customtkinter.CTkLabel(
+            self, image=self.logo, text="", font=body_med_font()
+        )
+        self.label_logo.grid(
+            row=1, column=0, columnspan=3, sticky="nsew", padx=15, pady=15
+        )
 
         # Description label
         self.note = "Select a game in the left-side menu to begin."
-        self.label_note = customtkinter.CTkLabel(master=self, text=self.note, font=subheading_font())
+        self.label_note = customtkinter.CTkLabel(
+            master=self, text=self.note, font=subheading_font()
+        )
         self.label_note.bind(
             "<Configure>",
-            lambda e: self.label_note.configure(wraplength=self.label_note.winfo_width() - 20),
+            lambda e: self.label_note.configure(
+                wraplength=self.label_note.winfo_width() - 20
+            ),
         )
-        self.label_note.grid(row=2, column=0, columnspan=3, sticky="nwes", padx=15, pady=(0, 30))
+        self.label_note.grid(
+            row=2, column=0, columnspan=3, sticky="nwes", padx=15, pady=(0, 30)
+        )
 
         # Buttons
         IMG_SIZE = 24
@@ -48,8 +60,9 @@ class TitleView(customtkinter.CTkFrame):
         DEFAULT_GRAY = ("gray50", "gray30")
         # -- Github
         self.github_logo = ImageTk.PhotoImage(
-            Image.open(f"{self.logo_path}/images/ui/github32_w.png").resize((IMG_SIZE, IMG_SIZE)),
-            Image.LANCZOS,
+            Image.open(f"{self.logo_path}/images/ui/github32_w.png").resize(
+                (IMG_SIZE, IMG_SIZE), Image.Resampling.LANCZOS
+            ),
         )
         self.btn_github = customtkinter.CTkButton(
             master=self,
@@ -67,8 +80,9 @@ class TitleView(customtkinter.CTkFrame):
 
         # -- Feedback
         self.feedback_logo = ImageTk.PhotoImage(
-            Image.open(f"{self.logo_path}/images/ui/feedback_w.png").resize((IMG_SIZE, IMG_SIZE)),
-            Image.LANCZOS,
+            Image.open(f"{self.logo_path}/images/ui/feedback_w.png").resize(
+                (IMG_SIZE, IMG_SIZE), Image.Resampling.LANCZOS
+            ),
         )
         self.btn_feedback = customtkinter.CTkButton(
             master=self,
@@ -86,8 +100,9 @@ class TitleView(customtkinter.CTkFrame):
 
         # -- Bug Report
         self.bug_logo = ImageTk.PhotoImage(
-            Image.open(f"{self.logo_path}/images/ui/bug-report_w.png").resize((IMG_SIZE, IMG_SIZE)),
-            Image.LANCZOS,
+            Image.open(f"{self.logo_path}/images/ui/bug-report_w.png").resize(
+                (IMG_SIZE, IMG_SIZE), Image.Resampling.LANCZOS
+            ),
         )
         self.btn_feedback = customtkinter.CTkButton(
             master=self,
@@ -106,8 +121,9 @@ class TitleView(customtkinter.CTkFrame):
 
         # -- Sprite Scraper
         self.scraper_logo = ImageTk.PhotoImage(
-            Image.open(f"{self.logo_path}/images/ui/scraper.png").resize((IMG_SIZE, IMG_SIZE)),
-            Image.LANCZOS,
+            Image.open(f"{self.logo_path}/images/ui/scraper.png").resize(
+                (IMG_SIZE, IMG_SIZE), Image.Resampling.LANCZOS
+            ),
         )
         self.btn_sprite_scraper = customtkinter.CTkButton(
             master=self,
@@ -138,4 +154,6 @@ class TitleView(customtkinter.CTkFrame):
         window.title("OSRS Wiki Sprite Scraper")
         view = SpriteScraperView(parent=window)
         view.pack(side="top", fill="both", expand=True, padx=20, pady=20)
-        window.after(100, window.lift)  # Workaround for bug where main window takes focus
+        window.after(
+            100, window.lift
+        )  # Workaround for bug where main window takes focus

@@ -72,20 +72,24 @@ class InfoFrame(customtkinter.CTkFrame):
         # -- images
         img_size = 18
         self.img_play = ImageTk.PhotoImage(
-            Image.open(f"{PATH}/images/ui/play.png").resize((img_size, img_size)),
-            Image.LANCZOS,
+            Image.open(f"{PATH}/images/ui/play.png").resize(
+                (img_size, img_size), Image.Resampling.LANCZOS
+            ),
         )
         self.img_stop = ImageTk.PhotoImage(
-            Image.open(f"{PATH}/images/ui/stop2.png").resize((img_size, img_size)),
-            Image.LANCZOS,
+            Image.open(f"{PATH}/images/ui/stop2.png").resize(
+                (img_size, img_size), Image.Resampling.LANCZOS
+            ),
         )
         self.img_options = ImageTk.PhotoImage(
-            Image.open(f"{PATH}/images/ui/options2.png").resize((img_size, img_size)),
-            Image.LANCZOS,
+            Image.open(f"{PATH}/images/ui/options2.png").resize(
+                (img_size, img_size), Image.Resampling.LANCZOS
+            ),
         )
         self.img_start = ImageTk.PhotoImage(
-            Image.open(f"{PATH}/images/ui/rocket.png").resize((img_size, img_size)),
-            Image.LANCZOS,
+            Image.open(f"{PATH}/images/ui/rocket.png").resize(
+                (img_size, img_size), Image.Resampling.LANCZOS
+            ),
         )
 
         self.lbl_controls_title = customtkinter.CTkLabel(

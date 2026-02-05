@@ -7,7 +7,7 @@ This module defines the core types used by all actions:
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type
 
 
 class ActionResult(Enum):
@@ -69,27 +69,37 @@ class ActionOutcome:
         return self.result == ActionResult.SKIPPED
 
     @classmethod
-    def ok(cls, message: str = "Success", **data) -> "ActionOutcome":
+    def ok(
+        cls: Type["ActionOutcome"], message: str = "Success", **data: Any
+    ) -> "ActionOutcome":
         """Create a successful outcome."""
         return cls(ActionResult.SUCCESS, message, data)
 
     @classmethod
-    def fail(cls, message: str = "Failed", **data) -> "ActionOutcome":
+    def fail(
+        cls: Type["ActionOutcome"], message: str = "Failed", **data: Any
+    ) -> "ActionOutcome":
         """Create a failed outcome."""
         return cls(ActionResult.FAILED, message, data)
 
     @classmethod
-    def timeout(cls, message: str = "Timed out", **data) -> "ActionOutcome":
+    def timeout(
+        cls: Type["ActionOutcome"], message: str = "Timed out", **data: Any
+    ) -> "ActionOutcome":
         """Create a timeout outcome."""
         return cls(ActionResult.TIMEOUT, message, data)
 
     @classmethod
-    def safety(cls, message: str = "Stopped for safety", **data) -> "ActionOutcome":
+    def safety(
+        cls: Type["ActionOutcome"], message: str = "Stopped for safety", **data: Any
+    ) -> "ActionOutcome":
         """Create a safety stop outcome."""
         return cls(ActionResult.SAFETY_STOP, message, data)
 
     @classmethod
-    def skip(cls, message: str = "Skipped", **data) -> "ActionOutcome":
+    def skip(
+        cls: Type["ActionOutcome"], message: str = "Skipped", **data: Any
+    ) -> "ActionOutcome":
         """Create a skipped outcome."""
         return cls(ActionResult.SKIPPED, message, data)
 

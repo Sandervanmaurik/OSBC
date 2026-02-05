@@ -8,7 +8,13 @@ import numpy as np
 
 import utilities.random_util as rd
 
-Point = NamedTuple("Point", x=int, y=int)
+
+class Point(NamedTuple):
+    """A 2D point with x and y coordinates."""
+
+    x: int
+    y: int
+
 
 # Thread-local storage for MSS instances to avoid threading issues
 _thread_local = threading.local()
@@ -16,13 +22,12 @@ _thread_local = threading.local()
 
 def get_mss_instance():
     """Get or create a thread-local MSS instance."""
-    if not hasattr(_thread_local, 'sct'):
+    if not hasattr(_thread_local, "sct"):
         _thread_local.sct = mss.mss()
     return _thread_local.sct
 
 
 class Rectangle:
-
     """
     In very rare cases, we may want to exclude areas within a Rectangle (E.g., resizable game view).
     This should contain a list of dicts that represent rectangles {left, top, width, height} that
@@ -107,7 +112,9 @@ class Rectangle:
         if custom_seeds is None:
             center = self.get_center()
             custom_seeds = rd.random_seeds(mod=(center[0] + center[1]))
-        x, y = rd.random_point_in(self.left, self.top, self.width, self.height, custom_seeds)
+        x, y = rd.random_point_in(
+            self.left, self.top, self.width, self.height, custom_seeds
+        )
         return Point(x, y)
 
     def get_center(self) -> Point:
@@ -127,7 +134,9 @@ class Rectangle:
             The distance from the point to the center of the object.
         """
         if self.reference_rect is None:
-            raise ReferenceError("A Rectangle being sorted is missing a reference to the Rectangle it's contained in and therefore cannot be sorted.")
+            raise ReferenceError(
+                "A Rectangle being sorted is missing a reference to the Rectangle it's contained in and therefore cannot be sorted."
+            )
         center: Point = self.get_center()
         rect_center: Point = self.reference_rect.get_center()
         return math.dist([center.x, center.y], [rect_center.x, rect_center.y])
@@ -173,7 +182,9 @@ class Rectangle:
         }
 
     def __str__(self):
-        return f"Rectangle(x={self.left}, y={self.top}, w={self.width}, h={self.height})"
+        return (
+            f"Rectangle(x={self.left}, y={self.top}, w={self.width}, h={self.height})"
+        )
 
     def __repr__(self):
         return self.__str__()
@@ -218,7 +229,9 @@ class RuneLiteObject:
             A Point.
         """
         if self.rect is None:
-            raise ReferenceError("The RuneLiteObject is missing a reference to the Rectangle it's contained in and therefore the center cannot be determined.")
+            raise ReferenceError(
+                "The RuneLiteObject is missing a reference to the Rectangle it's contained in and therefore the center cannot be determined."
+            )
         return Point(self._center[0] + self.rect.left, self._center[1] + self.rect.top)
 
     def distance_from_rect_center(self) -> float:
@@ -246,8 +259,14 @@ class RuneLiteObject:
         """
         if custom_seeds is None:
             custom_seeds = rd.random_seeds(mod=(self._center[0] + self._center[1]))
-        x, y = rd.random_point_in(self._x_min, self._y_min, self._width, self._height, custom_seeds)
-        return self.__relative_point([x, y]) if self.__point_exists([x, y]) else self.center()
+        x, y = rd.random_point_in(
+            self._x_min, self._y_min, self._width, self._height, custom_seeds
+        )
+        return (
+            self.__relative_point([x, y])
+            if self.__point_exists([x, y])
+            else self.center()
+        )
 
     def __relative_point(self, point: List[int]) -> Point:
         """
