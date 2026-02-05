@@ -8,6 +8,7 @@ from pynput import keyboard
 import utilities.settings as settings
 from utilities.game_launcher import Launchable
 from view.fonts.fonts import *
+from model.bot_session_state import BotSessionState
 
 
 class InfoFrame(customtkinter.CTkFrame):
@@ -32,7 +33,7 @@ class InfoFrame(customtkinter.CTkFrame):
         PATH = pathlib.Path(__file__).parent.parent.resolve()
 
         # Configure grid - removed skills row
-        self.rowconfigure((0, 2, 4, 5, 6, 7), weight=0)  # rows will not resize
+        self.rowconfigure((0, 2, 3, 4, 5, 6, 7), weight=0)  # rows will not resize
         self.rowconfigure(1, weight=1)  # description row will resize
         self.columnconfigure(0, weight=1, minsize=200)
         self.columnconfigure(1, weight=0)
@@ -57,6 +58,47 @@ class InfoFrame(customtkinter.CTkFrame):
                 wraplength=self.lbl_script_desc.winfo_width() - 10
             ),
         )
+
+        # -- session stats (row 2-3)
+        self.stats_frame = customtkinter.CTkFrame(master=self, fg_color=self._fg_color)
+        self.stats_frame.grid(
+            row=2, column=0, rowspan=2, sticky="ew", padx=15, pady=(10, 5)
+        )
+        self.stats_frame.columnconfigure(0, weight=0)
+        self.stats_frame.columnconfigure(1, weight=1)
+
+        # Action row
+        self.lbl_action_name = customtkinter.CTkLabel(
+            master=self.stats_frame,
+            text="Action:",
+            font=small_font(),
+            width=80,
+            anchor="w",
+        )
+        self.lbl_action_name.grid(row=0, column=0, padx=(0, 10), pady=2, sticky="w")
+
+        self.lbl_action_value = customtkinter.CTkLabel(
+            master=self.stats_frame, text="Idle", font=small_font(), anchor="w"
+        )
+        self.lbl_action_value.grid(row=0, column=1, pady=2, sticky="w")
+
+        # XP Gained row
+        self.lbl_xp_name = customtkinter.CTkLabel(
+            master=self.stats_frame,
+            text="XP Gained:",
+            font=small_font(),
+            width=80,
+            anchor="w",
+        )
+        self.lbl_xp_name.grid(row=1, column=0, padx=(0, 10), pady=2, sticky="w")
+
+        self.lbl_xp_value = customtkinter.CTkLabel(
+            master=self.stats_frame, text="0", font=small_font(), anchor="w"
+        )
+        self.lbl_xp_value.grid(row=1, column=1, pady=2, sticky="w")
+
+        # Subscribe to state changes
+        BotSessionState().add_observer(self._on_session_state_changed)
 
         # -- script progress bar
         self.lbl_progress = customtkinter.CTkLabel(
@@ -193,6 +235,11 @@ class InfoFrame(customtkinter.CTkFrame):
         )
         self.btn_reload.grid(row=4, column=0, pady=(5, 10), sticky="nsew")
 
+    def destroy(self) -> None:
+        """Cleanup observers before destroying frame."""
+        BotSessionState().remove_observer(self._on_session_state_changed)
+        super().destroy()
+
     # ---- Setup ----
     def set_controller(self, controller):
         self.controller = controller
@@ -304,7 +351,7 @@ class InfoFrame(customtkinter.CTkFrame):
             self.btn_launch.configure(state=tkinter.NORMAL)
         self.lbl_status.configure(text="Status: Configured")
 
-    def __toggle_buttons(self, enabled: bool):
+    def __toggle_buttons(self, enabled: bool) -> None:
         if enabled:
             self.btn_play.configure(state=tkinter.NORMAL)
             self.btn_stop.configure(state=tkinter.NORMAL)
@@ -315,7 +362,7 @@ class InfoFrame(customtkinter.CTkFrame):
             self.btn_options.configure(state=tkinter.DISABLED)
 
     # ---- Progress Bar Handlers ----
-    def update_progress(self, progress: float):
+    def update_progress(self, progress: float) -> None:
         """
         Called from controller. Updates the progress bar and percentage.
         Args:
@@ -324,8 +371,30 @@ class InfoFrame(customtkinter.CTkFrame):
         self.progressbar.set(progress)
         self.lbl_progress.configure(text=f"Progress: {progress * 100:.0f}%")
 
-    def update_state(self, state: str):
+    def update_state(self, state: str) -> None:
         """
         Called from controller. Updates the current bot state label.
         """
         self.lbl_state.configure(text=f"State: {state}")
+
+    def _on_session_state_changed(self) -> None:
+        """
+        Observer callback - called when BotSessionState changes.
+        Schedules UI update on main thread (thread-safe for Tkinter).
+        """
+        # Schedule update on main Tkinter thread to avoid threading issues
+        self.after_idle(self._update_session_stats_ui)
+
+    def _update_session_stats_ui(self) -> None:
+        """
+        Update session stats display (must be called from main thread).
+        """
+        state = BotSessionState()
+
+        # Update action text
+        action_text = state.current_action if state.current_action else "Idle"
+        self.lbl_action_value.configure(text=action_text)
+
+        # Update XP gained
+        xp_gained = state.get_total_xp_gained()
+        self.lbl_xp_value.configure(text=f"{xp_gained:,}")

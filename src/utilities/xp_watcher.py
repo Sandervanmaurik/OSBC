@@ -155,13 +155,15 @@ class XPWatcher:
             if skill_name and xp_amount is not None:
                 # Update SkillsManager with new XP (lazy import to avoid circular dependency)
                 from model.skills import SkillsManager
+                from model.bot_session_state import BotSessionState
 
                 manager = SkillsManager()
                 manager.update_skill_xp(skill_name, xp_amount)
 
-                print(
-                    f"[XP Watcher] Detected {skill_name}: total: {xp_amount})"
-                )
+                # Record starting XP for session tracking
+                BotSessionState().record_starting_xp(skill_name, xp_amount)
+
+                print(f"[XP Watcher] Detected {skill_name}: total: {xp_amount})")
                 return True
             elif xp_amount and not skill_name:
                 print(

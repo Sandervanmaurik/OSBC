@@ -49,6 +49,7 @@ class OSRSBot(RuneLiteBot, metaclass=ABCMeta):
         super().__init__("OSRS", bot_title, description, window)
         # Note: skill_levels is now a property that delegates to SkillsManager
         self._xp_watcher: Optional[XPWatcher] = None
+        self._action_watcher = None  # Initialized in on_start()
 
     @property
     def skill_levels(self) -> Dict[str, int]:
@@ -66,15 +67,24 @@ class OSRSBot(RuneLiteBot, metaclass=ABCMeta):
         """
         Hook called when the bot starts. Initializes skill tracking and XP watcher.
         """
+        # Reset session state for new session
+        from model.bot_session_state import BotSessionState
+
+        BotSessionState().reset()
+
         self.refresh_skill_levels(open_tab=True, return_to_inventory=True)
 
         # Initialize XP watcher for automatic XP tracking (lazy import to avoid circular dependency)
         if self.win:
             from utilities.xp_watcher import XPWatcher
+            from utilities.action_watcher import ActionWatcher
 
             self._xp_watcher = XPWatcher(self.win)
             self._xp_watcher.load_skill_templates()  # Load templates if available
-            self.log_msg("XP Watcher initialized")
+
+            self._action_watcher = ActionWatcher(self.win)
+
+            self.log_msg("XP Watcher and Action Watcher initialized")
 
     def get_skill_level(
         self,
@@ -226,5 +236,5 @@ class OSRSBot(RuneLiteBot, metaclass=ABCMeta):
         if self._xp_watcher and self._xp_watcher.should_check():
             self.log_msg("XP watcher active, checking for XP...")
             return self._xp_watcher.check_for_xp()
-        
+
         return False

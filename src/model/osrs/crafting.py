@@ -423,7 +423,7 @@ class OSRSCrafting(OSRSBot):
         while time.time() - start < timeout_seconds:
             if self._should_stop():
                 return False
-            if self._is_cutting():
+            if self._action_watcher.check() == "Cutting":
                 return True
             # === Use behavior system for polling delay ===
             self.behavior.timing.sleep((0.08, 0.18))
@@ -436,7 +436,7 @@ class OSRSCrafting(OSRSBot):
         while time.time() - start < timeout_seconds:
             if self._should_stop():
                 return False
-            if not self._is_cutting():
+            if self._action_watcher.check() != "Cutting":
                 return True
             if time.time() - last_log > 6.0:
                 self.log_msg("Cutting... waiting for completion.")
@@ -447,45 +447,6 @@ class OSRSCrafting(OSRSBot):
             self.behavior.timing.sleep((0.2, 0.6))
         self.log_msg("Cutting wait timed out; retrying cycle.")
         return False
-
-    def _is_cutting(self) -> bool:
-        """Check if 'Cutting' text is visible (crafting in progress)."""
-        rects = self._get_action_text_rects()
-        if not rects:
-            return False
-
-        colors = [clr.WHITE, clr.OFF_WHITE, clr.OFF_YELLOW]
-        for rect in rects:
-            if ocr.find_text("Cutting", rect, ocr.BOLD_12, colors):
-                return True
-            if ocr.find_text("Cutting", rect, ocr.PLAIN_12, colors):
-                return True
-
-            extracted = ocr.extract_text(rect, ocr.BOLD_12, colors)
-            if "Cutting" in extracted:
-                return True
-            extracted = ocr.extract_text(rect, ocr.PLAIN_12, colors)
-            if "Cutting" in extracted:
-                return True
-
-        return False
-
-    def _get_action_text_rects(self) -> List[Rectangle]:
-        """Get rectangles where action text appears (top-left of game view)."""
-        rects: List[Rectangle] = []
-
-        # Primary action text area
-        if hasattr(self.win, "current_action") and self.win.current_action:
-            rects.append(self.win.current_action)
-
-        # Fallback: top-left corner of game view
-        if self.win and self.win.game_view:
-            gv = self.win.game_view
-            rects.append(
-                Rectangle(gv.left, gv.top, min(320, gv.width), min(90, gv.height))
-            )
-
-        return rects
 
     # === BANKING LOGIC ===
 
