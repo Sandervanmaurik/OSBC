@@ -1,26 +1,11 @@
-### ⚠️ This project is in Alpha stage ⚠️
-
 # ![logo](https://github.com/kelltom/OS-Bot-COLOR/assets/44652363/c9b93ee8-91a7-4bb4-8e92-5944e2d9d283)
-OS Bot COLOR (OSBC) is a desktop client for controlling and monitoring automation scripts for games. This application is paired with a toolkit for writing new scripts. Unlike popular automation frameworks that modify/inject code into a game's client, OSBC is completely hands-off; it uses a combination of color detection, image recognition, and optical character recognition to navigate the game. The goal of OSBC is to provide a fun and educational learning experience for new & seasoned developers alike, emphasizing the exploration of automation technologies and not to encourage or support activities that are in violation of any game's Terms of Service.
-
-<!--
-💬 [Join the Discord](https://discord.gg/S6DXZfma5z) to discuss the project, ask questions, and follow development
-
-📹 Subscribe to [Kell's Code](https://www.youtube.com/@KellsCode/featured) on YouTube for updates and tutorials
-
-⭐ If you like this project, please leave a Star :)
- -->
+Auto OSBC is a desktop client for controlling and monitoring automation scripts for games. This application is paired with a toolkit for writing new scripts. Unlike popular automation frameworks that modify/inject code into a game's client, OSBC is completely hands-off; it uses a combination of color detection, image recognition, and optical character recognition to navigate the game. 
 
 # Installation
 
-## Supported Platforms
-- **Windows 10/11**
-- **Ubuntu 20.04/22.04**
-- **Other Linux distributions** (may work but not officially tested)
-
 ## Quick Start (Recommended)
 
-### Windows 10/11
+<!-- ### Windows 10/11
 1. **Download/clone** this repository
 2. **Run the installer**: Double-click `install-windows.bat` or run in Command Prompt:
    ```batch
@@ -40,13 +25,10 @@ OS Bot COLOR (OSBC) is a desktop client for controlling and monitoring automatio
 2. **Run the Python installer**:
    ```bash
    python install.py
-   ```
-
-## Manual Installation
-If automated installation fails:
+   ``` -->
 
 1. **Install Python 3.10-3.13** from [python.org](https://www.python.org/downloads/) (Python 3.10 recommended for best compatibility)
-2. **Create virtual environment**:
+2. **Create virtual environment from the root of the project**:
    ```bash
    python -m venv venv
    
