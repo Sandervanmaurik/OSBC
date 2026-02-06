@@ -41,6 +41,7 @@ class OSRSFletching(OSRSBot):
         super().__init__(bot_title=bot_title, description=description)
         self.primary_skill = "fletching"
 
+        self.options = {}  # Initialize for reload_model() check
         self.running_time = 60  # minutes
         self.fletching_method = "Headless arrows"
 
@@ -102,6 +103,8 @@ class OSRSFletching(OSRSBot):
         )
 
     def save_options(self, options: dict) -> None:
+        self.options = options  # CRITICAL: Store for reload_model() to transfer options
+
         for option in options:
             if option == "running_time":
                 self.running_time = int(options[option])
@@ -140,37 +143,41 @@ class OSRSFletching(OSRSBot):
         stats_log_interval = 300.0  # 5 minutes
 
         with self.timed_session(self.running_time) as session:
-            while session.running:
-                if self._should_stop():
-                    break
+            self.behavior.start_fidgeting(self)
+            try:
+                while session.running:
+                    if self._should_stop():
+                        break
 
-                # === NEW: Use attention behaviors (mouse movement only) ===
-                self.behavior.attention.perform_random_behaviors()
+                    # === NEW: Use attention behaviors (mouse movement only) ===
+                    self.behavior.attention.perform_random_behaviors()
 
-                # === Periodic stats logging (every 5 minutes) ===
-                now = time.time()
-                if now - last_stats_log >= stats_log_interval:
-                    self.behavior.log_stats_summary(self.log_msg)
-                    if hasattr(self, "controller") and self.controller:
-                        stats = self.behavior.get_stats_summary()
-                        self.controller.update_behavior_display(stats=stats)
-                    last_stats_log = now
+                    # === Periodic stats logging (every 5 minutes) ===
+                    now = time.time()
+                    if now - last_stats_log >= stats_log_interval:
+                        self.behavior.log_stats_summary(self.log_msg)
+                        if hasattr(self, "controller") and self.controller:
+                            stats = self.behavior.get_stats_summary()
+                            self.controller.update_behavior_display(stats=stats)
+                        last_stats_log = now
 
-                if self._should_take_break():
-                    self._take_break()
+                    if self._should_take_break():
+                        self._take_break()
 
-                if self.fletching_method == "Headless arrows":
-                    if not self._fletch_headless_arrows_cycle():
-                        # === NEW: Use behavior system for sleep ===
-                        self.behavior.timing.sleep((0.15, 0.4))
-                        continue
-                else:
-                    self._stop_with_message(
-                        f"Unsupported method: {self.fletching_method}"
-                    )
-                    break
+                    if self.fletching_method == "Headless arrows":
+                        if not self._fletch_headless_arrows_cycle():
+                            # === NEW: Use behavior system for sleep ===
+                            self.behavior.timing.sleep((0.15, 0.4))
+                            continue
+                    else:
+                        self._stop_with_message(
+                            f"Unsupported method: {self.fletching_method}"
+                        )
+                        break
 
-                session.increment("cycles")
+                    session.increment("cycles")
+            finally:
+                self.behavior.stop_fidgeting()
 
         self.log_msg("Fletching session complete.")
         if self.status == BotStatus.RUNNING:
@@ -192,39 +199,33 @@ class OSRSFletching(OSRSBot):
 
         self._missing_item_cycles = 0
 
-        # Pause fidgeting for the entire item interaction sequence
-        # to prevent mouse movement from interrupting the "use item on item" action
-        self.behavior.pause_fidgeting()
+        # Randomly flip item click order
+        if random.random() < self._order_flip_chance:
+            self._prefer_primary_first = not self._prefer_primary_first
 
-        try:
-            if random.random() < self._order_flip_chance:
-                self._prefer_primary_first = not self._prefer_primary_first
+        if self._prefer_primary_first:
+            primary_slots, secondary_slots = feather_slots, shaft_slots
+        else:
+            primary_slots, secondary_slots = shaft_slots, feather_slots
 
-            if self._prefer_primary_first:
-                primary_slots, secondary_slots = feather_slots, shaft_slots
-            else:
-                primary_slots, secondary_slots = shaft_slots, feather_slots
+        primary_slot = random.choice(primary_slots)
+        secondary_slot = random.choice(secondary_slots)
 
-            primary_slot = random.choice(primary_slots)
-            secondary_slot = random.choice(secondary_slots)
+        # Use item on item (auto-pauses fidgeting) - ItemInteractionMixin
+        if not self.use_item_on_item(
+            primary_slot, secondary_slot, randomize_order=False
+        ):
+            return False
 
-            if not self._click_inventory_slot(primary_slot):
-                return False
-            # === NEW: Use behavior system for micro-delay ===
-            self.behavior.timing.sleep((0.03, 0.08))
-            if not self._click_inventory_slot(secondary_slot):
-                return False
+        # Press spacebar - ItemInteractionMixin
+        if not self.press_space_to_confirm():
+            return False
 
-            if not self._press_space_to_confirm():
-                return False
-        finally:
-            # Resume fidgeting after item interaction is complete
-            self.behavior.resume_fidgeting()
-
+        # Wait for "Attaching" to start (custom logic)
         if not self._wait_for_attaching_start(
             timeout_seconds=self._attaching_start_timeout
         ):
-            if not self._press_space_to_confirm():
+            if not self.press_space_to_confirm():
                 return False
             if not self._wait_for_attaching_start(
                 timeout_seconds=self._attaching_start_timeout
@@ -242,8 +243,9 @@ class OSRSFletching(OSRSBot):
         if not templates:
             return ([], [])
 
-        feather_template = self._get_item_template_path(templates[0])
-        shaft_template = self._get_item_template_path(templates[1])
+        # Use TemplateMixin to get paths
+        feather_template = self.get_template_path(templates[0])
+        shaft_template = self.get_template_path(templates[1])
 
         feather_slots = self.find_item_in_inventory_visual(
             feather_template, confidence=self._item_confidence
@@ -253,31 +255,9 @@ class OSRSFletching(OSRSBot):
         )
         return (feather_slots, shaft_slots)
 
-    def _get_item_template_path(self, filename: str) -> str:
-        return str(imsearch.get_template_path("items", filename))
-
-    def _click_inventory_slot(self, slot_index: int) -> bool:
-        if not self.win.inventory_slots or slot_index >= len(self.win.inventory_slots):
-            return False
-
-        slot = self.win.inventory_slots[slot_index]
-        try:
-            click_point = slot.random_point()
-            # === NEW: Use behavior system for mouse movement ===
-            # Profile already configured for "fastest" speed
-            self.behavior.mouse.move_to(
-                click_point, mouseSpeed=random.choice(["fastest", "fast", "fastest"])
-            )
-            # === NEW: Use behavior system for pre-click delay ===
-            self.behavior.timing.sleep((0.02, 0.06))
-            # === NEW: Use behavior system for clicking ===
-            self.behavior.mouse.click()
-            return True
-        except Exception as exc:
-            self.log_msg(f"Inventory click error: {exc}")
-            return False
-
-    # === REMOVED: _sleep_fast() - now using behavior.timing.sleep() ===
+    # === REMOVED: _click_inventory_slot() - now using ItemInteractionMixin.click_inventory_slot() ===
+    # === REMOVED: _get_item_template_path() - now using TemplateMixin.get_template_path() ===
+    # === REMOVED: _press_space_to_confirm() - now using ItemInteractionMixin.press_space_to_confirm() ===
 
     def _wait_for_attaching_start(self, timeout_seconds: float) -> bool:
         start = time.time()
@@ -386,16 +366,6 @@ class OSRSFletching(OSRSBot):
     def _stop_with_message(self, message: str) -> None:
         self.log_msg(message)
         self.set_status(BotStatus.STOPPED)
-
-    def _press_space_to_confirm(self) -> bool:
-        # === NEW: Use behavior system for delay ===
-        self.behavior.timing.sleep((0.02, 0.06))
-        if not self._safe_key_press("space"):
-            self.log_msg("Failed to press space (window focus lost).")
-            return False
-        # === NEW: Use behavior system for delay ===
-        self.behavior.timing.sleep((0.03, 0.08))
-        return True
 
     def _get_action_text_rect(self) -> Optional[Rectangle]:
         if hasattr(self.win, "current_action") and self.win.current_action:

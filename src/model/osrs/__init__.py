@@ -1,5 +1,5 @@
 from .agility import AgilityBot
-from .combat import OSRSCombat
+from .cooking import OSRSCooking
 from .fletching import OSRSFletching
 from .fishing import FishingBot
 from .mining import OSRSMining
@@ -10,8 +10,8 @@ __all__ = [
     "AgilityBot",
     "OSRSFletching",
     "FishingBot",
-    "OSRSCombat",
     "OSRSMining",
     "OSRSWoodcutter",
     "OSRSCrafting",
+    "OSRSCooking",
 ]

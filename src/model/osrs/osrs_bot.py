@@ -5,12 +5,19 @@ import time
 from typing import TypeVar, Callable, Any, Dict, Optional, TYPE_CHECKING
 
 import utilities.color as clr
+from utilities.geometry import Rectangle
 import utilities.ocr as ocr
 import utilities.random_util as rd
 from utilities.osrs_skills import skill_index, skill_names
 
 from model.runelite_bot import RuneLiteBot, RuneLiteWindow
 from model.skills import SkillsManager
+from model.osrs.mixins import (
+    TemplateMixin,
+    BankingMixin,
+    ItemInteractionMixin,
+    ActionWaitingMixin,
+)
 
 if TYPE_CHECKING:
     from utilities.xp_watcher import XPWatcher
@@ -41,7 +48,14 @@ def validate_types(func: Callable[..., T]) -> Callable[..., T]:
     return wrapper
 
 
-class OSRSBot(RuneLiteBot, metaclass=ABCMeta):
+class OSRSBot(
+    TemplateMixin,
+    BankingMixin,
+    ItemInteractionMixin,
+    ActionWaitingMixin,
+    RuneLiteBot,  # Keep last for proper MRO
+    metaclass=ABCMeta,
+):
     win: RuneLiteWindow = None
 
     def __init__(self, bot_title: str, description: str) -> None:
@@ -195,7 +209,7 @@ class OSRSBot(RuneLiteBot, metaclass=ABCMeta):
 
         return self.skill_levels
 
-    def _read_skill_level_from_rect(self, rect) -> int:
+    def _read_skill_level_from_rect(self, rect: Rectangle) -> int:
         colors = [clr.WHITE, clr.OFF_WHITE, clr.OFF_YELLOW]
         for font in (ocr.PLAIN_11, ocr.PLAIN_12, ocr.BOLD_12):
             if res := ocr.extract_text(rect, font, colors):

@@ -1,12 +1,14 @@
 """
 StatsPanel - Right panel containing Skills, Current Action, and XP Gained.
 Composes existing SkillsFrame with new CurrentActionCard and XPGainedList.
+Displays dynamic XP totals in the XP GAINED section header.
 """
 
 import customtkinter
 from view.skills_frame import SkillsFrame
 from view.components.current_action_card import CurrentActionCard
 from view.components.xp_gained_list import XPGainedList
+from model.bot_session_state import BotSessionState
 
 
 class StatsPanel(customtkinter.CTkFrame):
@@ -72,6 +74,12 @@ class StatsPanel(customtkinter.CTkFrame):
         self.xp_gained_list = XPGainedList(parent=self)
         self.xp_gained_list.grid(row=5, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
+        # Subscribe to BotSessionState to update header with totals
+        BotSessionState().add_observer(self._on_session_changed)
+
+        # Initialize header with current values
+        self._update_xp_header()
+
     def get_skills_frame(self):
         """
         Get the SkillsFrame for controller binding.
@@ -81,6 +89,38 @@ class StatsPanel(customtkinter.CTkFrame):
         """
         return self.skills_frame
 
+    def destroy(self) -> None:
+        """Cleanup observers before destroying panel."""
+        BotSessionState().remove_observer(self._on_session_changed)
+        super().destroy()
+
     def clear_xp_gained(self):
         """Clear the XP Gained list (useful for session reset)."""
         self.xp_gained_list.clear()
+
+    def _on_session_changed(self):
+        """
+        Observer callback for BotSessionState changes.
+        Updates XP header with current totals.
+        """
+        # Schedule UI update on main thread (thread-safe for Tkinter)
+        self.after_idle(self._update_xp_header)
+
+    def _update_xp_header(self):
+        """
+        Update the XP GAINED header to show current and session totals.
+        Must be called from main thread.
+        """
+        state = BotSessionState()
+        current_total = state.get_total_xp_gained()
+        session_total = state.get_total_session_xp_gained()
+
+        # Only show totals if there's XP to display
+        if current_total > 0 or session_total > 0:
+            header_text = (
+                f"XP GAINED (Current: {current_total:,} | Session: {session_total:,})"
+            )
+        else:
+            header_text = "XP GAINED"
+
+        self.lbl_xp_header.configure(text=header_text)

@@ -1,15 +1,9 @@
 import random
 import time
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Tuple
 
-import utilities.color as clr
-import utilities.imagesearch as imsearch
-import utilities.ocr as ocr
 from model.bot import BotStatus
 from model.osrs.osrs_bot import OSRSBot
-from model.runelite_bot import RuneLiteObject
-from utilities.geometry import Rectangle
-from utilities.window import BankDetectionError
 
 # === Import behavior system ===
 from utilities.behavior import BehaviorManager
@@ -55,6 +49,7 @@ class OSRSCrafting(OSRSBot):
         super().__init__(bot_title=bot_title, description=description)
         self.primary_skill = "crafting"
 
+        self.options = {}  # Initialize for reload_model() check
         self.running_time = 60  # minutes
         self.crafting_method = "Cutting gems"
         self.gem_type = "Opal"  # Default gem type
@@ -117,6 +112,8 @@ class OSRSCrafting(OSRSBot):
             )
 
     def save_options(self, options: dict) -> None:
+        self.options = options  # CRITICAL: Store for reload_model() to transfer options
+
         for option in options:
             if option == "running_time":
                 self.running_time = int(options[option])
@@ -136,11 +133,7 @@ class OSRSCrafting(OSRSBot):
         self.options_set = True
 
     def main_loop(self) -> None:
-        self.log_msg("Starting crafting bot...")
-        self.log_msg(
-            "Background watchers enabled - action and XP will be tracked automatically"
-        )
-
+        self.log_msg(f"Starting crafting bot with method '{self.crafting_method}'")
         if not self._ensure_inventory_ready():
             self._stop_with_message(
                 "Inventory slots unavailable. Open the inventory tab and try again."
@@ -152,9 +145,6 @@ class OSRSCrafting(OSRSBot):
         self.behavior.log_stats_summary(self.log_msg)
         if hasattr(self, "controller") and self.controller:
             self.controller.update_behavior_display()
-
-        # Track time for periodic stats logging
-        import time
 
         last_stats_log = time.time()
         stats_log_interval = 30  # 30 seconds
@@ -246,13 +236,13 @@ class OSRSCrafting(OSRSBot):
             input_template: Template for input item (uncut gem)
             output_template: Template for output item (cut gem)
         """
-        # Open bank
-        if not self._open_bank():
+        # Open bank using BankingMixin (supports string color or None)
+        if not self.open_bank(tag_color="green"):  # Uses BankingMixin
             self.log_msg("Failed to open bank.")
             return False
 
-        # Ensure bank slots are detected
-        if not self._ensure_bank_slots_detected():
+        # Ensure bank slots are detected using BankingMixin
+        if not self.ensure_bank_slots_detected():  # Uses BankingMixin
             self.log_msg("Cannot perform banking: bank slot detection failed.")
             self._safe_key_press("escape")
             return False
@@ -265,66 +255,111 @@ class OSRSCrafting(OSRSBot):
             self.log_msg(
                 f"Found {len(cut_gem_slots)} cut gems and {len(crushed_gem_slots)} crushed gems, depositing..."
             )
-            if not self._deposit_products_shift_click(cut_gem_slots, crushed_gem_slots):
+            # Deposit specific slots using BankingMixin
+            all_product_slots = cut_gem_slots + crushed_gem_slots
+            if not self.deposit_items_shift_click(
+                all_product_slots
+            ):  # Uses BankingMixin
                 return False
 
         # Now withdraw supplies (tool if needed, then input items)
         return self._withdraw_supplies(tool_template, input_template)
 
+    def _withdraw_supplies(self, tool_template: str, input_template: str) -> bool:
+        """
+        Withdraw tool (if needed) and input items from bank.
+        Bank must already be open when calling this method.
+
+        Args:
+            tool_template: Template filename for tool (e.g., "chisel.png")
+            input_template: Template filename for input item (e.g., "uncut_opal.png")
+        """
+        # Smart tool detection
+        tool_slots, _ = self._find_crafting_slots(tool_template, input_template)
+        if not tool_slots:
+            self.log_msg(f"No {tool_template} found, withdrawing 1...")
+            # Search for tool in bank slots - use TemplateMixin
+            tool_path = self.get_template_path(tool_template)
+            result = self.find_item_in_bank(tool_path, confidence=self._item_confidence)
+            if result:
+                tool_slot, slot_index = result
+                self.behavior.mouse.move_to(tool_slot.random_point(), mouseSpeed="fast")
+                self.behavior.timing.sleep((0.1, 0.2))
+                self.behavior.mouse.click()
+                self.behavior.timing.sleep((0.3, 0.6))
+            else:
+                self.log_msg(f"{tool_template} not found in bank!")
+                self._safe_key_press("escape")
+                return False
+        else:
+            self.log_msg(f"{tool_template} already in inventory, skipping...")
+
+        # Withdraw input items (click to fill inventory) - use TemplateMixin
+        self.log_msg(f"Withdrawing {input_template}...")
+        input_path = self.get_template_path(input_template)
+        result = self.find_item_in_bank(input_path, confidence=self._item_confidence)
+
+        if result:
+            input_slot, slot_index = result
+            self.behavior.mouse.move_to(input_slot.random_point(), mouseSpeed="fast")
+            self.behavior.timing.sleep((0.1, 0.2))
+            self.behavior.mouse.click()
+            self.behavior.timing.sleep((0.3, 0.6))
+        else:
+            self.log_msg(f"{input_template} not found in bank! Stopping...")
+            self._safe_key_press("escape")
+            return False
+
+        # Close bank
+        self._safe_key_press("escape")
+        self.behavior.timing.sleep((0.4, 0.9))
+        return True
+
     def _craft_gems(self, tool_slots: List[int], input_slots: List[int]) -> bool:
         """
         Craft gems by using tool on input item.
 
-        NOTE: Pauses fidgeting during the entire item interaction sequence
-        to prevent mouse movement from interrupting the "use item on item" action.
+        NOTE: Uses ItemInteractionMixin.use_item_on_item() which automatically
+        pauses fidgeting during the item interaction sequence.
         """
-        # Pause fidgeting for the entire crafting action sequence
-        self.behavior.pause_fidgeting()
+        # Randomly flip item click order
+        if random.random() < self._order_flip_chance:
+            self._prefer_chisel_first = not self._prefer_chisel_first
 
-        try:
-            # Randomly flip item click order
-            if random.random() < self._order_flip_chance:
-                self._prefer_chisel_first = not self._prefer_chisel_first
+        if self._prefer_chisel_first:
+            primary_slots, secondary_slots = tool_slots, input_slots
+        else:
+            primary_slots, secondary_slots = input_slots, tool_slots
 
-            if self._prefer_chisel_first:
-                primary_slots, secondary_slots = tool_slots, input_slots
-            else:
-                primary_slots, secondary_slots = input_slots, tool_slots
+        # Pick random slots
+        primary_slot = random.choice(primary_slots)
+        secondary_slot = random.choice(secondary_slots)
 
-            # Pick random slots
-            primary_slot = random.choice(primary_slots)
-            secondary_slot = random.choice(secondary_slots)
+        # Use item on item (auto-pauses fidgeting) - ItemInteractionMixin
+        if not self.use_item_on_item(
+            primary_slot, secondary_slot, randomize_order=False
+        ):
+            return False
 
-            # Click items
-            if not self._click_inventory_slot(primary_slot):
-                return False
-            # === Use behavior system for micro-delay ===
-            self.behavior.timing.sleep((0.03, 0.08))
-            if not self._click_inventory_slot(secondary_slot):
-                return False
+        # Press spacebar with randomized delay - ItemInteractionMixin
+        if not self.press_space_to_confirm():
+            return False
 
-            # Press spacebar with randomized delay
-            if not self._press_space_to_confirm():
-                return False
-        finally:
-            # Resume fidgeting after item interaction is complete
-            self.behavior.resume_fidgeting()
-
-        # Wait for "Cutting" to start
-        if not self._wait_for_cutting_start(
-            timeout_seconds=self._cutting_start_timeout
+        # Wait for "Cutting" to start - ActionWaitingMixin
+        if not self.wait_for_action_start(
+            "Cutting", self._cutting_start_timeout
         ):
             # Try spacebar again
-            if not self._press_space_to_confirm():
+            if not self.press_space_to_confirm():
                 return False
-            if not self._wait_for_cutting_start(
-                timeout_seconds=self._cutting_start_timeout
+            if not self.wait_for_action_start(
+                "Cutting", self._cutting_start_timeout
             ):
                 self.log_msg("Crafting did not start (no 'Cutting' text).")
                 return False
 
-        # Wait for cutting to end
-        return self._wait_for_cutting_end(timeout_seconds=self._cutting_end_timeout)
+        # Wait for cutting to end - ActionWaitingMixin
+        return self.wait_for_action_end("Cutting", self._cutting_end_timeout)
 
     def _find_crafting_slots(
         self, tool_template: str, input_template: str
@@ -339,8 +374,9 @@ class OSRSCrafting(OSRSBot):
         if not self.win.inventory_slots:
             return ([], [])
 
-        tool_path = self._get_item_template_path(tool_template)
-        input_path = self._get_item_template_path(input_template)
+        # Use TemplateMixin to get paths (auto-detects "tools" vs "items")
+        tool_path = self.get_template_path(tool_template)
+        input_path = self.get_template_path(input_template)
 
         tool_slots = self.find_item_in_inventory_visual(
             tool_path, confidence=self._inventory_item_confidence
@@ -363,8 +399,9 @@ class OSRSCrafting(OSRSBot):
         if not self.win.inventory_slots:
             return ([], [])
 
-        output_path = self._get_item_template_path(output_template)
-        byproduct_path = self._get_item_template_path(self.BYPRODUCT_TEMPLATE)
+        # Use TemplateMixin to get paths
+        output_path = self.get_template_path(output_template)
+        byproduct_path = self.get_template_path(self.BYPRODUCT_TEMPLATE)
 
         # Find both cut gems and crushed gems
         cut_gem_slots = self.find_item_in_inventory_visual(
@@ -375,339 +412,6 @@ class OSRSCrafting(OSRSBot):
         )
 
         return (cut_gem_slots, crushed_gem_slots)
-
-    def _get_item_template_path(self, filename: str) -> str:
-        """Get path to item template image."""
-        # Tools go in "tools" subfolder, others in "items"
-        if filename == "chisel.png":
-            return str(imsearch.get_template_path("tools", filename))
-        else:
-            return str(imsearch.get_template_path("items", filename))
-
-    def _click_inventory_slot(self, slot_index: int) -> bool:
-        """Click an inventory slot with human-like behavior."""
-        if not self.win.inventory_slots or slot_index >= len(self.win.inventory_slots):
-            return False
-
-        slot = self.win.inventory_slots[slot_index]
-        try:
-            click_point = slot.random_point()
-            # === Use behavior system for mouse movement ===
-            self.behavior.mouse.move_to(
-                click_point, mouseSpeed=random.choice(["fastest", "fast", "fastest"])
-            )
-            # === Use behavior system for pre-click delay ===
-            self.behavior.timing.sleep((0.02, 0.06))
-            # === Use behavior system for clicking ===
-            self.behavior.mouse.click()
-            return True
-        except Exception as exc:
-            self.log_msg(f"Inventory click error: {exc}")
-            return False
-
-    def _press_space_to_confirm(self) -> bool:
-        """Press spacebar with randomized delay (1-2 seconds)."""
-        # === Use behavior system for delay before spacebar ===
-        import utilities.random_util as rd
-
-        delay = rd.truncated_normal_sample(1.0, 2.0, mean=1.5, std=0.3)
-        time.sleep(delay)
-
-        if not self._safe_key_press("space"):
-            self.log_msg("Failed to press space (window focus lost).")
-            return False
-
-        # === Use behavior system for delay after ===
-        self.behavior.timing.sleep((0.03, 0.08))
-        return True
-
-    def _wait_for_cutting_start(self, timeout_seconds: float) -> bool:
-        """Wait for 'Cutting' text to appear (read from background watcher state)."""
-        from model.bot_session_state import BotSessionState
-
-        start = time.time()
-        while time.time() - start < timeout_seconds:
-            if self._should_stop():
-                return False
-            # Read current action from background watcher's updated state
-            current_action = BotSessionState().get_current_action()
-            if current_action == "Cutting":
-                self.log_msg(
-                    f"[WATCHER] Cutting started (detected by background watcher)"
-                )
-                return True
-            # === Use behavior system for polling delay ===
-            self.behavior.timing.sleep((0.08, 0.18))
-        return False
-
-    def _wait_for_cutting_end(self, timeout_seconds: float) -> bool:
-        """Wait for 'Cutting' text to disappear (read from background watcher state)."""
-        from model.bot_session_state import BotSessionState
-        from model.skills import SkillsManager
-
-        start = time.time()
-        last_log = 0.0
-        while time.time() - start < timeout_seconds:
-            if self._should_stop():
-                return False
-            # Read current action from background watcher's updated state
-            current_action = BotSessionState().get_current_action()
-            if current_action != "Cutting":
-                self.log_msg(
-                    f"[WATCHER] Cutting completed (detected by background watcher)"
-                )
-                return True
-            if time.time() - last_log > 6.0:
-                self.log_msg("Cutting... waiting for completion.")
-                # Check if XP was gained (updated by background XP watcher)
-                crafting_skill = SkillsManager().get_skill("Crafting")
-                if crafting_skill.xp_gained > 0:
-                    self.log_msg(
-                        f"[WATCHER] XP gained: {crafting_skill.xp_gained} (total: {crafting_skill.xp})"
-                    )
-                last_log = time.time()
-            # === Use behavior system for polling delay ===
-            self.behavior.timing.sleep((0.2, 0.6))
-        self.log_msg("Cutting wait timed out; retrying cycle.")
-        return False
-
-    # === BANKING LOGIC ===
-
-    def _ensure_bank_slots_detected(self) -> bool:
-        """
-        Detect bank slots if not already done. Call after bank opens.
-
-        Returns:
-            True if bank slots are detected/cached, False if detection failed.
-        """
-        if self.win.bank_slots:
-            return True  # Already detected and cached
-
-        try:
-            self.win.locate_bank_slots(verbose=False)
-            self.log_msg(f"Detected {len(self.win.bank_slots)} bank slots")
-            return True
-        except BankDetectionError as e:
-            self.log_msg(f"Bank slot detection failed: {e}")
-            return False
-
-    def _withdraw_supplies(self, tool_template: str, input_template: str) -> bool:
-        """
-        Withdraw tool (if needed) and input items from bank.
-        Bank must already be open when calling this method.
-
-        Args:
-            tool_template: Template filename for tool (e.g., "chisel.png")
-            input_template: Template filename for input item (e.g., "uncut_opal.png")
-        """
-        # Smart tool detection
-        tool_slots, _ = self._find_crafting_slots(tool_template, input_template)
-        if not tool_slots:
-            self.log_msg(f"No {tool_template} found, withdrawing 1...")
-            # Search for tool in bank slots
-            tool_path = self._get_item_template_path(tool_template)
-            result = self.find_item_in_bank_visual(
-                tool_path, confidence=self._item_confidence
-            )
-            if result:
-                tool_slot, slot_index = result
-                self.behavior.mouse.move_to(tool_slot.random_point(), mouseSpeed="fast")
-                self.behavior.timing.sleep((0.1, 0.2))
-                self.behavior.mouse.click()
-                self.behavior.timing.sleep((0.3, 0.6))
-            else:
-                self.log_msg(f"{tool_template} not found in bank!")
-                self._safe_key_press("escape")
-                return False
-        else:
-            self.log_msg(f"{tool_template} already in inventory, skipping...")
-
-        # Withdraw input items (click to fill inventory)
-        self.log_msg(f"Withdrawing {input_template}...")
-        input_path = self._get_item_template_path(input_template)
-        result = self.find_item_in_bank_visual(
-            input_path, confidence=self._item_confidence
-        )
-
-        if result:
-            input_slot, slot_index = result
-            self.behavior.mouse.move_to(input_slot.random_point(), mouseSpeed="fast")
-            self.behavior.timing.sleep((0.1, 0.2))
-            self.behavior.mouse.click()
-            self.behavior.timing.sleep((0.3, 0.6))
-        else:
-            self.log_msg(f"{input_template} not found in bank! Stopping...")
-            self._safe_key_press("escape")
-            return False
-
-        # Close bank
-        self._safe_key_press("escape")
-        self.behavior.timing.sleep((0.4, 0.9))
-        return True
-
-    def _deposit_products_shift_click(
-        self, cut_gem_slots: List[int], crushed_gem_slots: List[int]
-    ) -> bool:
-        """
-        Deposit cut gems and crushed gems using shift+click.
-        Bank must already be open when calling this method.
-        Does NOT close the bank after depositing.
-
-        Note: Shift+clicking ONE item deposits ALL items of that type.
-        We click one cut gem (deposits all cut gems) and one crushed gem (deposits all crushed gems).
-
-        Args:
-            cut_gem_slots: List of inventory slot indices containing cut gems
-            crushed_gem_slots: List of inventory slot indices containing crushed gems
-
-        Returns:
-            True if deposit successful, False otherwise
-        """
-        if not cut_gem_slots and not crushed_gem_slots:
-            return True  # Nothing to deposit
-
-        if not self._safe_key_down("shift"):
-            return False
-
-        try:
-            if not self.win.inventory_slots:
-                return False
-
-            # Shift+click ONE cut gem to deposit ALL cut gems
-            if cut_gem_slots:
-                slot_index = cut_gem_slots[0]
-                if slot_index < len(self.win.inventory_slots):
-                    slot = self.win.inventory_slots[slot_index]
-                    self.behavior.mouse.move_to(slot.random_point(), mouseSpeed="fast")
-                    self.behavior.timing.sleep((0.05, 0.1))
-                    self.behavior.mouse.click()
-                    self.behavior.timing.sleep((0.15, 0.3))
-
-            # Shift+click ONE crushed gem to deposit ALL crushed gems
-            if crushed_gem_slots:
-                slot_index = crushed_gem_slots[0]
-                if slot_index < len(self.win.inventory_slots):
-                    slot = self.win.inventory_slots[slot_index]
-                    self.behavior.mouse.move_to(slot.random_point(), mouseSpeed="fast")
-                    self.behavior.timing.sleep((0.05, 0.1))
-                    self.behavior.mouse.click()
-                    self.behavior.timing.sleep((0.15, 0.3))
-        finally:
-            self._safe_key_up("shift")
-
-        self.behavior.timing.sleep((0.3, 0.7))
-        return True
-
-    def _open_bank(self) -> bool:
-        """Find and open green-tagged bank."""
-        # Check if bank already open
-        if self._bank_interface_visible():
-            self.log_msg("Bank already open.")
-            return True
-
-        # Find green-tagged bank
-        bank = self._find_bank_with_rotation()
-        if bank is None:
-            self.log_msg("Green-tagged bank not found.")
-            return False
-
-        # Move to bank and click
-        self.behavior.mouse.move_to(bank.random_point(), mouseSpeed="medium")
-        self.behavior.timing.sleep((0.2, 0.6))
-
-        if not self.mouseover_text(contains=["Bank", "Deposit"]):
-            self.behavior.mouse.click()
-            self.behavior.timing.sleep((1.0, 1.8))
-            bank = self._find_bank_with_rotation(attempts=2)
-            if bank is None:
-                return False
-            self.behavior.mouse.move_to(bank.random_point(), mouseSpeed="medium")
-            self.behavior.timing.sleep((0.2, 0.5))
-            if not self.mouseover_text(contains=["Bank", "Deposit"]):
-                return False
-
-        self.behavior.mouse.click()
-        if not self._wait_for_bank_open():
-            self.log_msg("Bank did not open, retrying...")
-            self.behavior.timing.sleep((0.5, 1.0))
-            return False
-
-        return True
-
-    def _find_tagged_bank(self) -> Optional[RuneLiteObject]:
-        """Find bank marked with GREEN outline."""
-        bank = self.get_nearest_tag(clr.GREEN)
-        return bank
-
-    def _find_bank_with_rotation(self, attempts: int = 3) -> Optional[RuneLiteObject]:
-        """Find bank, rotating camera if needed."""
-        for attempt in range(attempts):
-            bank = self._find_tagged_bank()
-            if bank is not None:
-                return bank
-            if attempt < attempts - 1:
-                self.log_msg(
-                    f"Bank not found, rotating camera (attempt {attempt + 1}/{attempts})"
-                )
-                self._rotate_camera_search()
-                self.behavior.timing.sleep((0.5, 1.2))
-        return None
-
-    def _wait_for_bank_open(self, timeout_seconds: float = 8.0) -> bool:
-        """Wait for bank interface to open."""
-        start = time.time()
-        while time.time() - start < timeout_seconds:
-            if self.status != BotStatus.RUNNING:
-                return False
-            if self._bank_interface_visible():
-                return True
-            self.behavior.timing.sleep((0.12, 0.25))
-        return False
-
-    def _bank_interface_visible(self) -> bool:
-        """Check if bank UI is open using OCR."""
-        try:
-            words = ["The Bank of Gielinor", "Gielinor", "(GE:)"]
-            if ocr.find_text(words, self.win.game_view, ocr.PLAIN_12, [clr.OFF_ORANGE]):
-                return True
-            if ocr.find_text(words, self.win.game_view, ocr.BOLD_12, [clr.OFF_ORANGE]):
-                return True
-        except Exception as exc:
-            self.log_msg(f"Bank UI check error: {exc}")
-        return False
-
-    def _deposit_all_shift_click(self) -> bool:
-        """Deposit all items using shift+click."""
-        if not self._safe_key_down("shift"):
-            return False
-        try:
-            if not self.win.inventory_slots:
-                return False
-            slot = random.choice(self.win.inventory_slots)
-            self.behavior.mouse.move_to(slot.random_point(), mouseSpeed="fast")
-            self.behavior.timing.sleep((0.1, 0.3))
-            self.behavior.mouse.click()
-        finally:
-            self._safe_key_up("shift")
-        self.behavior.timing.sleep((0.3, 0.7))
-        self._safe_key_press("escape")
-        self.behavior.timing.sleep((0.4, 0.9))
-        return True
-
-    def _rotate_camera_search(self) -> None:
-        """Rotate camera slightly to search for bank."""
-        if random.random() < 0.5:
-            self._safe_key_down("left")
-        else:
-            self._safe_key_down("right")
-
-        import utilities.random_util as rd
-
-        duration = rd.truncated_normal_sample(0.3, 0.8, mean=0.5, std=0.15)
-        time.sleep(duration)
-
-        self._safe_key_up("left")
-        self._safe_key_up("right")
 
     # === UTILITY METHODS ===
 

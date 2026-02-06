@@ -1,6 +1,7 @@
 """
 XPGainedList - List of skills with XP gained, styled as skill cells.
 Subscribes to BotSessionState for real-time XP tracking updates.
+Displays both current (script run) and session (app lifetime) XP gains.
 """
 
 import pathlib
@@ -44,6 +45,12 @@ class XPGainedList(customtkinter.CTkScrollableFrame):
         # Initial population
         self._update_xp_list()
 
+    def destroy(self) -> None:
+        """Cleanup observers before destroying component."""
+        BotSessionState().remove_observer(self._on_session_changed)
+        SkillsManager().remove_observer(self._on_skills_changed)
+        super().destroy()
+
     def _on_session_changed(self):
         """
         Observer callback for BotSessionState changes.
@@ -63,17 +70,22 @@ class XPGainedList(customtkinter.CTkScrollableFrame):
     def _update_xp_list(self):
         """
         Update the XP gained list.
-        Creates/removes skill rows based on xp_gained > 0.
+        Creates/removes skill rows based on current xp_gained > 0.
+        Session totals are still visible in the header.
         Must be called from main thread.
         """
         session_state = BotSessionState()
 
-        # Determine which skills have gained XP using BotSessionState
+        # Determine which skills have gained XP in the current script run
+        # (Session totals are shown in the header, so we only show active skills here)
         skills_with_xp = []
         for skill_name in SKILL_ORDER:
-            xp_gained = session_state.get_xp_gained(skill_name)
-            if xp_gained > 0:
-                skills_with_xp.append((skill_name, xp_gained))
+            current_xp = session_state.get_xp_gained(skill_name)
+            session_xp = session_state.get_session_xp_gained(skill_name)
+
+            # Only show row if the current script run has gained XP
+            if current_xp > 0:
+                skills_with_xp.append((skill_name, current_xp, session_xp))
 
         # Remove skills that no longer have XP
         for skill_name in list(self.skill_rows.keys()):
@@ -82,21 +94,22 @@ class XPGainedList(customtkinter.CTkScrollableFrame):
                 del self.skill_rows[skill_name]
 
         # Create or update skills with XP
-        for skill_name, xp_gained in skills_with_xp:
+        for skill_name, current_xp, session_xp in skills_with_xp:
             if skill_name not in self.skill_rows:
                 # Create new row
-                self._create_skill_row(skill_name, xp_gained)
+                self._create_skill_row(skill_name, current_xp, session_xp)
             else:
                 # Update existing row
-                self._update_skill_row(skill_name, xp_gained)
+                self._update_skill_row(skill_name, current_xp, session_xp)
 
-    def _create_skill_row(self, skill_name: str, xp_gained: int):
+    def _create_skill_row(self, skill_name: str, current_xp: int, session_xp: int):
         """
-        Create a new skill row (icon + name + XP).
+        Create a new skill row (icon + name + Current XP + Session XP).
 
         Args:
             skill_name: Name of the skill
-            xp_gained: XP gained for this skill
+            current_xp: XP gained in current script run
+            session_xp: XP gained since app opened
         """
         # Row frame (styled like skill cell)
         row_frame = customtkinter.CTkFrame(
@@ -137,31 +150,107 @@ class XPGainedList(customtkinter.CTkScrollableFrame):
         )
         lbl_name.pack(side="left", padx=5, fill="x", expand=True)
 
-        # XP value label
-        lbl_xp = customtkinter.CTkLabel(
-            row_frame,
-            text=f"+{xp_gained:,}",
-            font=("Roboto Medium", 12),
+        # Container for XP labels (right side)
+        xp_container = customtkinter.CTkFrame(row_frame, fg_color="transparent")
+        xp_container.pack(side="right", padx=8)
+
+        # Current XP label (always shown)
+        lbl_current_xp = customtkinter.CTkLabel(
+            xp_container,
+            text=f"+{current_xp:,}",
+            font=("Roboto Medium", 11),
             text_color="#4A90E2",
             anchor="e",
         )
-        lbl_xp.pack(side="right", padx=8)
+        lbl_current_xp.pack(side="left")
+
+        # Session XP (only shown if different from current)
+        lbl_divider = None
+        lbl_session_xp = None
+        if session_xp != current_xp:
+            # Gray divider
+            lbl_divider = customtkinter.CTkLabel(
+                xp_container,
+                text="│",
+                font=("Roboto", 11),
+                text_color="#666666",
+                anchor="center",
+            )
+            lbl_divider.pack(side="left", padx=6)
+
+            # Session XP label
+            lbl_session_xp = customtkinter.CTkLabel(
+                xp_container,
+                text=f"+{session_xp:,}",
+                font=("Roboto Medium", 11),
+                text_color="#7A7A7A",  # Slightly muted to distinguish from current
+                anchor="e",
+            )
+            lbl_session_xp.pack(side="left")
 
         # Store references
         self.skill_rows[skill_name] = row_frame
-        row_frame.lbl_xp = lbl_xp  # Store XP label for updates
+        row_frame.lbl_current_xp = lbl_current_xp
+        row_frame.lbl_divider = lbl_divider
+        row_frame.lbl_session_xp = lbl_session_xp
+        row_frame.xp_container = xp_container
 
-    def _update_skill_row(self, skill_name: str, xp_gained: int):
+    def _update_skill_row(self, skill_name: str, current_xp: int, session_xp: int):
         """
-        Update an existing skill row's XP value.
+        Update an existing skill row's XP values.
 
         Args:
             skill_name: Name of the skill
-            xp_gained: Updated XP gained for this skill
+            current_xp: Updated XP gained in current script run
+            session_xp: Updated XP gained since app opened
         """
         row_frame = self.skill_rows.get(skill_name)
-        if row_frame and hasattr(row_frame, "lbl_xp"):
-            row_frame.lbl_xp.configure(text=f"+{xp_gained:,}")
+        if not row_frame:
+            return
+
+        # Update current XP (always shown)
+        if hasattr(row_frame, "lbl_current_xp"):
+            row_frame.lbl_current_xp.configure(text=f"+{current_xp:,}")
+
+        # Handle session XP display (only when different from current)
+        if session_xp != current_xp:
+            # Need to show divider and session XP
+            if (
+                not hasattr(row_frame, "lbl_session_xp")
+                or row_frame.lbl_session_xp is None
+            ):
+                # Create divider and session label if they don't exist
+                lbl_divider = customtkinter.CTkLabel(
+                    row_frame.xp_container,
+                    text="│",
+                    font=("Roboto", 11),
+                    text_color="#666666",
+                    anchor="center",
+                )
+                lbl_divider.pack(side="left", padx=6)
+
+                lbl_session_xp = customtkinter.CTkLabel(
+                    row_frame.xp_container,
+                    text=f"+{session_xp:,}",
+                    font=("Roboto Medium", 11),
+                    text_color="#7A7A7A",
+                    anchor="e",
+                )
+                lbl_session_xp.pack(side="left")
+
+                row_frame.lbl_divider = lbl_divider
+                row_frame.lbl_session_xp = lbl_session_xp
+            else:
+                # Update existing session XP label
+                row_frame.lbl_session_xp.configure(text=f"+{session_xp:,}")
+        else:
+            # Current and session are the same, hide divider and session label
+            if hasattr(row_frame, "lbl_divider") and row_frame.lbl_divider:
+                row_frame.lbl_divider.pack_forget()
+                row_frame.lbl_divider = None
+            if hasattr(row_frame, "lbl_session_xp") and row_frame.lbl_session_xp:
+                row_frame.lbl_session_xp.pack_forget()
+                row_frame.lbl_session_xp = None
 
     def clear(self):
         """Clear all skill rows (useful for session reset)."""

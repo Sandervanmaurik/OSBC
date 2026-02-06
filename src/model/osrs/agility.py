@@ -369,7 +369,7 @@ class AgilityBot(OSRSBot):
                         time.sleep(0.5)
 
                     timeout = 15 if self.course == "Canifis" else 10
-                    self.wait_for_movement_to_stop(timeout=timeout)
+                    self.wait_for_movement_to_stop(timeout)
                     continue
 
                 # Then check for mark of grace if no obstacle found
@@ -430,7 +430,7 @@ class AgilityBot(OSRSBot):
 
                     # Wait for movement to complete with adjusted timeout for Canifis
                     timeout = 15 if self.course == "Canifis" else 10
-                    self.wait_for_movement_to_stop(timeout=timeout)
+                    self.wait_for_movement_to_stop(timeout)
 
                 else:
                     # Try to find continue squares if no obstacle found

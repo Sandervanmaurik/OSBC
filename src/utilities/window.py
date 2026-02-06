@@ -470,11 +470,11 @@ class Window:
         # Constants based on OSRS bank interface layout
         TITLE_OFFSET_X = 5  # Title is ~5px from left edge of bank interface
         TITLE_OFFSET_Y = 8  # Title is ~8px from top edge of bank interface
-        GRID_START_X = -46  # First slot is 0px from left edge of bank interface
+        GRID_START_X = -44  # First slot is 0px from left edge of bank interface
         GRID_START_Y = 72  # First slot is 60px from top edge of bank interface
-        SLOT_W = 36  # Full slot width
+        SLOT_W = 37  # Full slot width
         SLOT_H = 35  # Full slot height
-        GAP_X = 12  # Horizontal gap between slots
+        GAP_X = 11  # Horizontal gap between slots
         GAP_Y = 1  # Vertical gap between rows
         CLICK_OFFSET_X = 2  # Reduce width by 4px total (2px each side) to avoid borders
         CLICK_OFFSET_Y = (

@@ -36,8 +36,17 @@ class BotController(object):
             # Transfer necessary state
             new_model.set_controller(self)
             new_model.options_set = self.model.options_set
+            print(
+                f"[RELOAD_MODEL DEBUG] old_model has 'options': {hasattr(self.model, 'options')}"
+            )
             if hasattr(self.model, "options"):
+                print(f"[RELOAD_MODEL DEBUG] old_model.options = {self.model.options}")
                 new_model.save_options(self.model.options)
+                print(f"[RELOAD_MODEL DEBUG] Called new_model.save_options()")
+            else:
+                print(
+                    f"[RELOAD_MODEL DEBUG] old_model has NO options attribute - cannot transfer!"
+                )
             # Replace model
             self.model = new_model
             self.update_status()
