@@ -59,6 +59,16 @@ class BotSessionState:
         if self.current_action != action:
             self.current_action = action
             self.notify_observers()
+            
+            
+    def get_current_action(self) -> Optional[str]:
+        """
+        Get current action.
+
+        Returns:
+            Current action name or None if idle
+        """
+        return self.current_action
 
     def record_starting_xp(self, skill: str, xp: int) -> None:
         """

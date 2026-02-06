@@ -25,9 +25,10 @@ import utilities.color as clr
 import utilities.ocr as ocr
 from utilities.geometry import Rectangle
 from utilities.window import Window
+from utilities.watcher_base import BackgroundWatcher
 
 
-class ActionWatcher:
+class ActionWatcher(BackgroundWatcher):
     """
     Watches the action text area for current activity.
 
@@ -37,6 +38,9 @@ class ActionWatcher:
 
     # Check interval (seconds) - how often to check for action text
     CHECK_INTERVAL = 0.5
+
+    # Background polling interval (matches CHECK_INTERVAL)
+    POLL_INTERVAL = 0.5
 
     # Known actions to detect (extensible - add more as needed)
     KNOWN_ACTIONS = ["Attaching", "Cutting"]
@@ -48,7 +52,7 @@ class ActionWatcher:
         Args:
             window: Window instance with initialized game client
         """
-        self.window = window
+        super().__init__(window)
         self._last_check_time = 0.0
         self._action_rect: Optional[Rectangle] = None
 
@@ -76,6 +80,17 @@ class ActionWatcher:
             left=gv.left, top=gv.top, width=action_width, height=action_height
         )
 
+    def _poll(self) -> None:
+        """
+        Background poll implementation.
+
+        Called automatically by the background thread at POLL_INTERVAL.
+        Delegates to the existing check() method.
+        """
+        result = self.check()
+        # Log every poll for debugging (will show polling is active)
+        # print(f"[ActionWatcher] Poll cycle complete, current action: {result}")
+
     def check(self) -> Optional[str]:
         """
         Check the action area for current activity text.
@@ -101,6 +116,10 @@ class ActionWatcher:
         action = self._detect_action()
 
         # Update state (triggers observer notifications if changed)
+        prev_action = state.current_action
+        if action != prev_action:
+            print(f"[ActionWatcher] Action changed: {prev_action} → {action}")
+
         state.set_action(action)
 
         return action

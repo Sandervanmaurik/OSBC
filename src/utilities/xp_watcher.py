@@ -26,6 +26,7 @@ import numpy as np
 
 from utilities.geometry import Rectangle
 from utilities.window import Window
+from utilities.watcher_base import BackgroundWatcher
 from utilities.osrs_skills import skill_names
 import utilities.ocr as ocr
 import utilities.color as clr
@@ -41,7 +42,7 @@ SKILL_ICON_CONFIDENCE_THRESHOLD = 0.8
 SKILL_ICON_SIZE = 25
 
 
-class XPWatcher:
+class XPWatcher(BackgroundWatcher):
     """
     Watches the XP popup area for skill experience gains.
 
@@ -51,6 +52,9 @@ class XPWatcher:
 
     # Check interval (seconds) - how often to check for XP popup
     CHECK_INTERVAL = 2.0
+
+    # Background polling interval (matches CHECK_INTERVAL)
+    POLL_INTERVAL = 2.0
 
     # XP popup appears for ~4-5 seconds, so we check every 2 seconds to catch it
 
@@ -62,7 +66,7 @@ class XPWatcher:
             window: Window instance with initialized game client
             debug: Enable debug logging and screenshot saving
         """
-        self.window = window
+        super().__init__(window)
         self.debug = debug
         self._last_check_time = 0.0
         self._xp_area: Optional[Rectangle] = None
@@ -74,6 +78,19 @@ class XPWatcher:
 
         # Auto-load skill templates from skills directory
         self.load_skill_templates()
+
+    def _poll(self) -> None:
+        """
+        Background poll implementation.
+
+        Called automatically by the background thread at POLL_INTERVAL.
+        Delegates to the existing check methods.
+        """
+        if self.should_check():
+            result = self.check_for_xp()
+            # Log every successful XP detection
+            if result:
+                print(f"[XPWatcher] Poll detected XP gain")
 
     def _calculate_xp_area(self) -> None:
         """
@@ -158,12 +175,17 @@ class XPWatcher:
                 from model.bot_session_state import BotSessionState
 
                 manager = SkillsManager()
+                skill = manager.get_skill(skill_name)
+                prev_xp = skill.xp
+
                 manager.update_skill_xp(skill_name, xp_amount)
 
                 # Record starting XP for session tracking
                 BotSessionState().record_starting_xp(skill_name, xp_amount)
 
-                print(f"[XP Watcher] Detected {skill_name}: total: {xp_amount})")
+                print(
+                    f"[XPWatcher] XP detected! {skill_name}: +{xp_amount - prev_xp} XP (total: {xp_amount})"
+                )
                 return True
             elif xp_amount and not skill_name:
                 print(

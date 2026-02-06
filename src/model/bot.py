@@ -177,7 +177,15 @@ class Bot(ABC):
         """
         self.log_msg("Stopping script.")
         if self.status != BotStatus.STOPPED:
+            # Set status to STOPPED first, so watchers can detect and exit
             self.set_status(BotStatus.STOPPED)
+
+            # Call on_stop hook if defined (for cleanup like stopping watchers)
+            if hasattr(self, "on_stop"):
+                try:
+                    self.on_stop()
+                except Exception as exc:
+                    self.log_msg(f"on_stop failed: {exc}")
             self.thread.stop()
             self.thread.join()
         else:

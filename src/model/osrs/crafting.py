@@ -136,6 +136,9 @@ class OSRSCrafting(OSRSBot):
 
     def main_loop(self) -> None:
         self.log_msg("Starting crafting bot...")
+        self.log_msg(
+            "Background watchers enabled - action and XP will be tracked automatically"
+        )
 
         if not self._ensure_inventory_ready():
             self._stop_with_message(
@@ -418,30 +421,49 @@ class OSRSCrafting(OSRSBot):
         return True
 
     def _wait_for_cutting_start(self, timeout_seconds: float) -> bool:
-        """Wait for 'Cutting' text to appear."""
+        """Wait for 'Cutting' text to appear (read from background watcher state)."""
+        from model.bot_session_state import BotSessionState
+
         start = time.time()
         while time.time() - start < timeout_seconds:
             if self._should_stop():
                 return False
-            if self._action_watcher.check() == "Cutting":
+            # Read current action from background watcher's updated state
+            current_action = BotSessionState().get_current_action()
+            if current_action == "Cutting":
+                self.log_msg(
+                    f"[WATCHER] Cutting started (detected by background watcher)"
+                )
                 return True
             # === Use behavior system for polling delay ===
             self.behavior.timing.sleep((0.08, 0.18))
         return False
 
     def _wait_for_cutting_end(self, timeout_seconds: float) -> bool:
-        """Wait for 'Cutting' text to disappear."""
+        """Wait for 'Cutting' text to disappear (read from background watcher state)."""
+        from model.bot_session_state import BotSessionState
+        from model.skills import SkillsManager
+
         start = time.time()
         last_log = 0.0
         while time.time() - start < timeout_seconds:
             if self._should_stop():
                 return False
-            if self._action_watcher.check() != "Cutting":
+            # Read current action from background watcher's updated state
+            current_action = BotSessionState().get_current_action()
+            if current_action != "Cutting":
+                self.log_msg(
+                    f"[WATCHER] Cutting completed (detected by background watcher)"
+                )
                 return True
             if time.time() - last_log > 6.0:
                 self.log_msg("Cutting... waiting for completion.")
-                if self.check_xp_watcher():
-                    self.log_msg("XP gained!")
+                # Check if XP was gained (updated by background XP watcher)
+                crafting_skill = SkillsManager().get_skill("Crafting")
+                if crafting_skill.xp_gained > 0:
+                    self.log_msg(
+                        f"[WATCHER] XP gained: {crafting_skill.xp_gained} (total: {crafting_skill.xp})"
+                    )
                 last_log = time.time()
             # === Use behavior system for polling delay ===
             self.behavior.timing.sleep((0.2, 0.6))

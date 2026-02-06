@@ -44,7 +44,7 @@ def validate_types(func: Callable[..., T]) -> Callable[..., T]:
 class OSRSBot(RuneLiteBot, metaclass=ABCMeta):
     win: RuneLiteWindow = None
 
-    def __init__(self, bot_title, description) -> None:
+    def __init__(self, bot_title: str, description: str) -> None:
         window = RuneLiteWindow("RuneLite")
         super().__init__("OSRS", bot_title, description, window)
         # Note: skill_levels is now a property that delegates to SkillsManager
@@ -84,7 +84,22 @@ class OSRSBot(RuneLiteBot, metaclass=ABCMeta):
 
             self._action_watcher = ActionWatcher(self.win)
 
-            self.log_msg("XP Watcher and Action Watcher initialized")
+            # Start background tracking threads
+            self._xp_watcher.start_background(self)
+            self._action_watcher.start_background(self)
+
+            self.log_msg(
+                "XP Watcher and Action Watcher initialized (background tracking enabled)"
+            )
+
+    def on_stop(self) -> None:
+        """
+        Hook called when the bot stops. Stops background watcher threads.
+        """
+        if self._xp_watcher:
+            self._xp_watcher.stop_background()
+        if self._action_watcher:
+            self._action_watcher.stop_background()
 
     def get_skill_level(
         self,
