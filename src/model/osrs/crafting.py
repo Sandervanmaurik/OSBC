@@ -53,6 +53,7 @@ class OSRSCrafting(OSRSBot):
             "Ultra-minimal camera movement, human-like timing patterns."
         )
         super().__init__(bot_title=bot_title, description=description)
+        self.primary_skill = "crafting"
 
         self.running_time = 60  # minutes
         self.crafting_method = "Cutting gems"

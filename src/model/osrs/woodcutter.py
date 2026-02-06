@@ -54,6 +54,7 @@ class OSRSWoodcutter(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             "Prioritizes natural behavior and avoids getting stuck."
         )
         super().__init__(bot_title=bot_title, description=description)
+        self.primary_skill = "woodcutting"
 
         self.running_time = 60  # minutes
         self.take_breaks = False

@@ -18,6 +18,8 @@ from model import Bot, RuneLiteBot
 from utilities.game_launcher import Launchable
 from view import *
 from view.fonts.fonts import *
+from view.components import CollapsibleSidebar, ScriptMenuButton
+from view.panels import StatsPanel, ScriptPanel, WelcomePanel
 from utilities.machine_config import get_machine_config
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
@@ -43,10 +45,14 @@ class App(customtkinter.CTk):
                 pathlib.Path(__file__).parent.resolve().joinpath("images", "ui")
             )
             self.img_rocket = ImageTk.PhotoImage(
-                Image.open(ui_images_path.joinpath("rocket.png")).resize((12, 12), Image.Resampling.LANCZOS)
+                Image.open(ui_images_path.joinpath("rocket.png")).resize(
+                    (12, 12), Image.Resampling.LANCZOS
+                )
             )
             self.img_settings = ImageTk.PhotoImage(
-                Image.open(ui_images_path.joinpath("options.png")).resize((12, 12), Image.Resampling.LANCZOS)
+                Image.open(ui_images_path.joinpath("options.png")).resize(
+                    (12, 12), Image.Resampling.LANCZOS
+                )
             )
             self.build_ui()
 
@@ -60,94 +66,78 @@ class App(customtkinter.CTk):
             "WM_DELETE_WINDOW", self.on_closing
         )  # call .on_closing() when app gets closed
 
-        # ============ Create Two Frames ============
+        # ============ Create 3-Panel Layout ============
+        # Column 0: Sidebar (collapsible, 50-180px)
+        # Column 1: Middle panel (expandable, script view or welcome)
+        # Column 2: Stats panel (fixed width ~280px)
 
-        # configure grid layout (1x2)
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=0, minsize=50)  # Sidebar
+        self.grid_columnconfigure(1, weight=1)  # Middle panel (expandable)
+        self.grid_columnconfigure(2, weight=0, minsize=280)  # Stats panel
         self.grid_rowconfigure(0, weight=1)
 
-        self.frame_left = customtkinter.CTkFrame(
-            master=self,
-            corner_radius=0,
+        # ============ Initialize Panels ============
+        # Create collapsible sidebar (left panel)
+        from view.components.collapsible_sidebar import CollapsibleSidebar
+
+        self.sidebar = CollapsibleSidebar(
+            parent=self,
+            on_toggle=self._on_sidebar_toggle,
+            on_settings=self._on_settings_clicked,
         )
-        self.frame_left.grid(row=0, column=0, sticky="nswe")
+        self.sidebar.grid(row=0, column=0, sticky="nswe")
 
-        self.frame_right = customtkinter.CTkFrame(master=self)
-        self.frame_right.grid(row=0, column=1, sticky="nswe", padx=20, pady=20)
-
-        # ============ View/Controller Configuration (frame_right) ============
-        self.views: dict[
-            str, customtkinter.CTkFrame
-        ] = {}  # A map of all views, keyed by game title
-        self.models: dict[
-            str, Bot
-        ] = {}  # A map of all models (bots), keyed by bot title
-
-        # Home Views
-        self.home_view = TitleView(parent=self.frame_right, main=self)
-        self.home_view.pack(
-            in_=self.frame_right,
-            side=tkinter.TOP,
-            fill=tkinter.BOTH,
-            expand=True,
-            padx=0,
-            pady=0,
+        # Create middle panel container
+        self.middle_container = customtkinter.CTkFrame(
+            master=self, fg_color="transparent"
         )
-        self.views["Select a game"] = self.home_view
+        self.middle_container.grid(row=0, column=1, sticky="nswe")
+        self.middle_container.grid_columnconfigure(0, weight=1)
+        self.middle_container.grid_rowconfigure(0, weight=1)
 
-        # Script view and controller [DO NOT EDIT]
-        # self.views["Script"] is a dynamically changing view on frame_right that changes based on the model assigned to the controller
-        self.views["Script"] = BotView(parent=self.frame_right)
-        self.controller = BotController(model=None, view=self.views["Script"])
-        self.views["Script"].set_controller(self.controller)
+        # Create stats panel (right panel)
+        from view.panels.stats_panel import StatsPanel
 
-        # ============ Left-Side Menu (frame_left) ============
+        self.stats_panel = StatsPanel(parent=self)
+        self.stats_panel.grid(row=0, column=2, sticky="nswe")
 
-        # Configure grid layout
-        self.frame_left.grid_columnconfigure(0, weight=0)  # label
-        self.frame_left.grid_columnconfigure(1, weight=0)  # dropdown
-        self.frame_left.grid_rowconfigure(2, weight=1)  # buttons
-        self.frame_left.grid_rowconfigure(3, weight=0)  # settings
+        # ============ View/Controller Configuration ============
+        self.models: dict[str, Bot] = {}  # Map of all bots, keyed by bot name
 
-        # Label and dropdown menu inside the scrollable frame
-        self.label_1 = customtkinter.CTkLabel(
-            master=self.frame_left, text="Scripts", font=heading_font()
+        # Create welcome panel (shown when no script selected)
+        from view.panels.welcome_panel import WelcomePanel
+
+        self.welcome_panel = WelcomePanel(parent=self.middle_container)
+        self.welcome_panel.grid(row=0, column=0, sticky="nswe")
+
+        # Create script panel (shown when script is selected)
+        from view.panels.script_panel import ScriptPanel
+
+        self.script_panel = ScriptPanel(
+            parent=self.middle_container,
+            play_command=self._on_play_clicked,
+            stop_command=self._on_stop_clicked,
+            options_command=self._on_options_clicked,
         )
-        self.label_1.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        # Don't grid yet - will show when script selected
 
-        # Create Scrollable Frame
-        # Scrollable frame width could be made configurable if needed
-        self.scrollable_frame_left = customtkinter.CTkScrollableFrame(
-            master=self.frame_left,
-            width=160,
-            fg_color="#2b2b2b",
-            scrollbar_button_color="#333333",
-        )
-        self.scrollable_frame_left.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
+        # Create controller (using legacy BotView for compatibility)
+        # We'll wire the new panels to the controller below
+        self.legacy_bot_view = BotView(parent=self.middle_container)
+        self.controller = BotController(model=None, view=self.legacy_bot_view)
+        self.legacy_bot_view.set_controller(self.controller)
 
-        # ============ Bot/Button Configuration (scrollable_frame_left) ============
-        # Dynamically import all bots from the model folder and add them to the UI
-        # If your bot is not appearing, make sure it is referenced in the __init__.py file of the folder it exists in.
-
-        # Button map
-        # Key value pairs of game titles and a list of buttons for that game.
-        # This is populated below.
-        self.btn_map: dict[str, List[customtkinter.CTkButton]] = {
-            "Select a game": [],
-        }
-
-        # Dropdown menu for selecting a game
-        self.menu_game_selector = customtkinter.CTkOptionMenu(
-            master=self.frame_left,
-            font=body_large_font(),
-            dropdown_font=body_med_font(),
-            values=list(self.btn_map.keys()),
-            command=self.__on_game_selector_change,
-        )
-        self.menu_game_selector.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        # ============ Bot Discovery and Sidebar Population ============
+        # Dynamically import all OSRS bots and add them to the sidebar
+        # Only OSRS bots are supported (no game selector dropdown)
 
         module = importlib.import_module("model")
         names = dir(module)
+
+        # Track script buttons for selection management
+        self.script_buttons: dict[str, any] = {}  # {bot_name: ScriptMenuButton}
+        self.current_selected_bot: str = None  # Currently selected bot name
+
         for name in names:
             obj = getattr(module, name)
             if (
@@ -157,114 +147,202 @@ class App(customtkinter.CTk):
                 and issubclass(obj, Bot)
             ):
                 instance = obj()
-                # Make a home view if one doesn't exist
-                if (
-                    isinstance(instance, RuneLiteBot)
-                    and instance.game_title not in self.views
-                ):
-                    self.views[instance.game_title] = RuneLiteHomeView(
-                        parent=self, main=self, game_title=instance.game_title
-                    )
-                elif (
-                    isinstance(instance, Bot) and instance.game_title not in self.views
-                ):
-                    self.views[instance.game_title] = HomeView(
-                        parent=self, main=self, game_title=instance.game_title
-                    )
-                # Make a button section if one doesn't exist
-                if instance.game_title not in self.btn_map:
-                    self.btn_map[instance.game_title] = []
+
+                # Only add OSRS bots (game_title == "OSRS")
+                if instance.game_title != "OSRS":
+                    continue
+
+                # Set controller
                 instance.set_controller(self.controller)
                 self.models[name] = instance
-                self.btn_map[instance.game_title].append(
-                    self.__create_button(
-                        bot_key=name, launchable=isinstance(instance, Launchable)
-                    )
+
+                # Create script menu button with primary skill icon
+                from view.components.script_menu_button import ScriptMenuButton
+
+                primary_skill = getattr(
+                    instance, "primary_skill", "attack"
+                )  # Default to attack if not set
+
+                script_button = ScriptMenuButton(
+                    parent=self.sidebar.get_scripts_frame(),
+                    script_name=instance.bot_title,
+                    primary_skill=primary_skill,
+                    command=lambda bot_name=name: self._on_script_selected(bot_name),
+                    is_collapsed=False,
                 )
 
-        # Configure the dropdown values to be list(self.btn_map.keys())
-        self.menu_game_selector.configure(values=list(self.btn_map.keys()))
+                # Add button to sidebar
+                self.sidebar.add_script_button(name, script_button)
+                self.script_buttons[name] = script_button
 
-        # Settings Button (in the position of the Theme Switch)
-        self.btn_settings = customtkinter.CTkButton(
-            master=self.frame_left,
-            fg_color="#2a2d2e",
-            hover_color=self.DEFAULT_GRAY,
-            text="Settings",
-            font=button_med_font(),
-            image=self.img_settings,
-            command=self.__on_settings_clicked,
-        )
-        self.btn_settings.grid(row=3, column=0, pady=(5, 10), padx=5)
-
-        # Status variables to track state of views and buttons
-        self.current_home_view: customtkinter.CTkFrame = self.views["Select a game"]
-        self.current_btn: customtkinter.CTkButton = None
-        self.current_btn_list: List[customtkinter.CTkButton] = None
-
-        # Auto-select OSRS on startup (must be after status variables are initialized)
-        if "OSRS" in self.btn_map:
-            self.menu_game_selector.set("OSRS")
-            self.__on_game_selector_change("OSRS")
-
-    # ============ UI Creation Helpers ============
-    def __create_button(self, bot_key: str, launchable: bool = False) -> customtkinter.CTkButton:
+    # ============ Event Handlers ============
+    def _on_sidebar_toggle(self, is_collapsed: bool):
         """
-        Creates a preconfigured button for the bot.
-        Args:
-            bot_key: the key of the bot as it exists in it's dictionary.
-            launchable: True if the button should have a little rocket icon.
-        Returns:
-            Tkinter.Button - the button created.
+        Handle sidebar collapse/expand.
+        Updates sidebar width constraint.
         """
-        max_length = 14 if launchable else 18
-        shrink_length = 10 if launchable else 14
-
-        text: str = self.models[bot_key].bot_title
-        if len(text) > max_length:
-            text = f"{text[:max_length]}..."
-            tooltip = True
+        if is_collapsed:
+            self.grid_columnconfigure(0, minsize=50, weight=0)
         else:
-            tooltip = False
-        font = (
-            button_small_font()
-            if len(self.models[bot_key].bot_title) > shrink_length
-            else button_med_font()
+            self.grid_columnconfigure(0, minsize=180, weight=0)
+
+    def _on_script_selected(self, bot_name: str):
+        """
+        Handle script selection from sidebar.
+        Shows script panel and loads bot into controller.
+        """
+        bot = self.models.get(bot_name)
+        if not bot:
+            return
+
+        # If same script is selected, deselect it
+        if self.current_selected_bot == bot_name:
+            self._deselect_script()
+            return
+
+        # Update selection state
+        self.current_selected_bot = bot_name
+        self.sidebar.set_script_selected(bot_name, selected=True)
+
+        # Hide welcome panel, show script panel
+        self.welcome_panel.grid_forget()
+        self.script_panel.grid(row=0, column=0, sticky="nswe")
+
+        # Update script panel info
+        self.script_panel.set_script_info(
+            title=bot.bot_title,
+            description=bot.description,
         )
 
-        btn = customtkinter.CTkButton(
-            master=self.scrollable_frame_left,
-            text=text,
-            fg_color=self.DEFAULT_GRAY,
-            font=font,
-            image=self.img_rocket if launchable else None,
-            command=lambda: self.__toggle_bot_by_key(bot_key, btn),
-        )
+        # IMPORTANT: Wire the script_panel's frames to match what BotController expects
+        # Create a view adapter that exposes the interface BotController needs
+        self._create_view_adapter()
 
-        if tooltip:
-            ToolTip(
-                btn,
-                delay=0.1,
-                font=small_font(),
-                msg=self.models[bot_key].bot_title,
-                bg="#333333",
-                fg="#ffffff",
-            )
+        # Change model in controller
+        self.controller.change_model(bot)
 
-        return btn
-
-    def toggle_btn_state(self, enabled: bool) -> None:
+    def _create_view_adapter(self):
         """
-        Toggles the state of the buttons in the current button list.
-        Args:
-            enabled: bool - True to enable buttons, False to disable buttons.
+        Create a simple adapter so BotController can access our new panels.
+        The controller expects view.frame_info, view.frame_skills, view.frame_output_log, etc.
         """
-        if self.current_btn_list is not None:
-            for btn in self.current_btn_list:
-                if enabled:
-                    btn.configure(state="normal")
-                else:
-                    btn.configure(state="disabled")
+        script_panel = self.script_panel
+        stats_panel = self.stats_panel
+        legacy_view = self.legacy_bot_view
+
+        # Create a simple wrapper object that the controller can use
+        class ViewAdapter:
+            def __init__(adapter_self):
+                # Use script_panel's frames for log and behavior
+                adapter_self.frame_output_log = script_panel.get_log_frame()
+                adapter_self.frame_behavior = script_panel.get_behavior_frame()
+
+                # Use stats_panel's skills frame
+                adapter_self.frame_skills = stats_panel.get_skills_frame()
+
+                # For frame_info, create a wrapper that delegates to both
+                # the legacy frame_info and our script_panel
+                adapter_self.frame_info = adapter_self._create_info_frame_wrapper(
+                    legacy_view.frame_info, script_panel
+                )
+
+            def _create_info_frame_wrapper(adapter_self, legacy_info, script_panel):
+                """Create a wrapper for InfoFrame that updates both legacy and new UI."""
+
+                class InfoFrameWrapper:
+                    def __init__(self):
+                        self.legacy = legacy_info
+                        self.script_panel = script_panel
+
+                    def update_progress(self, progress):
+                        # Update both legacy (for keyboard listener, etc) and new panel
+                        self.legacy.update_progress(progress)
+                        self.script_panel.update_progress(progress)
+
+                    def update_status_running(self):
+                        self.legacy.update_status_running()
+                        # Update control bar to show Stop button
+                        self.script_panel.get_control_bar()._update_buttons("running")
+
+                    def update_status_stopped(self):
+                        self.legacy.update_status_stopped()
+                        # Update control bar to show Play button
+                        self.script_panel.get_control_bar()._update_buttons("stopped")
+
+                    def update_status_configuring(self):
+                        self.legacy.update_status_configuring()
+
+                    def update_status_configured(self):
+                        self.legacy.update_status_configured()
+
+                    def update_state(self, state):
+                        self.legacy.update_state(state)
+                        # State is also visible in CurrentActionCard via BotSessionState
+
+                    def setup(self, title, description):
+                        self.legacy.setup(title, description)
+                        # Script panel already shows title/description
+
+                    def start_keyboard_listener(self):
+                        self.legacy.start_keyboard_listener()
+
+                    def stop_keyboard_listener(self):
+                        self.legacy.stop_keyboard_listener()
+
+                return InfoFrameWrapper()
+
+            def update_behavior_display(adapter_self, behavior_config, stats):
+                """Forward behavior updates to the behavior frame."""
+                adapter_self.frame_behavior.update_behavior_display(
+                    behavior_config, stats
+                )
+
+        # Replace the controller's view with our adapter
+        self.controller.view = ViewAdapter()
+
+    def _deselect_script(self):
+        """Deselect current script and show welcome panel."""
+        if self.current_selected_bot:
+            self.sidebar.set_script_selected(self.current_selected_bot, selected=False)
+            self.current_selected_bot = None
+
+        # Hide script panel, show welcome panel
+        self.script_panel.grid_forget()
+        self.welcome_panel.grid(row=0, column=0, sticky="nswe")
+
+        # Unlink model from controller
+        if self.controller.model:
+            self.controller.model.progress = 0
+            self.controller.update_progress()
+            self.controller.change_model(None)
+
+    def _on_play_clicked(self):
+        """Handle Play button click."""
+        if self.controller:
+            self.controller.play()
+
+    def _on_stop_clicked(self):
+        """Handle Stop button click."""
+        if self.controller:
+            self.controller.stop()
+
+    def _on_options_clicked(self):
+        """Handle Options button click - opens bot options dialog."""
+        if not self.controller or not self.controller.model:
+            return
+
+        window = customtkinter.CTkToplevel(master=self)
+        window.title("Options")
+        window.protocol("WM_DELETE_WINDOW", lambda: self._on_options_closing(window))
+
+        view = self.controller.get_options_view(parent=window)
+        view.pack(side="top", fill="both", expand=True, padx=20, pady=20)
+        window.after(100, window.lift)
+
+    def _on_options_closing(self, window):
+        """Handle options window closing."""
+        window.destroy()
+        # Re-enable controls if needed
 
     # ============ Settings Init ============
     def __init_settings(self):
@@ -275,106 +353,15 @@ class App(customtkinter.CTk):
         keybind = settings.get("keybind")
         if keybind is None:
             settings.set("keybind", settings.default_keybind)
-           
 
-    # ============ Button Handlers ============
-    def __on_settings_clicked(self):
+    def _on_settings_clicked(self):
+        """Open settings dialog."""
         window = customtkinter.CTkToplevel(master=self)
         window.geometry("540x287")
         window.title("Settings")
         view = SettingsView(parent=window)
         view.pack(side="top", fill="both", expand=True, padx=20, pady=20)
-        window.after(
-            100, window.lift
-        )  # Workaround for bug where main window takes focus
-
-    def __on_game_selector_change(self, choice):
-        """
-        Handles the event that occurs when the user selects a game title from the dropdown menu.
-        Args:
-            choice: The key of the game that the user selected.
-        """
-        if choice not in list(self.btn_map.keys()):
-            return
-        # Un-highlight current button
-        if self.current_btn is not None:
-            self.current_btn.configure(fg_color=self.DEFAULT_GRAY)
-            self.current_btn = None
-        # Unpack current buttons
-        if self.current_btn_list is not None:
-            for btn in self.current_btn_list:
-                btn.grid_forget()
-        # Unpack current script view
-        if self.views["Script"].winfo_exists():
-            self.views["Script"].pack_forget()
-        # Unlink model from controller
-        self.controller.change_model(None)
-        # Pack new buttons
-        self.current_btn_list = self.btn_map[choice]
-        for r, btn in enumerate(self.current_btn_list, 3):
-            btn.grid(row=r, column=0, sticky="we", padx=10, pady=10)
-        # Repack new home view
-        self.current_home_view.pack_forget()
-        self.current_home_view = self.views[choice]
-        self.current_home_view.pack(
-            in_=self.frame_right,
-            side=tkinter.TOP,
-            fill=tkinter.BOTH,
-            expand=True,
-            padx=0,
-            pady=0,
-        )
-        self.toggle_btn_state(enabled=False)
-
-    def __toggle_bot_by_key(self, bot_key: keyboard.Key, btn: customtkinter.CTkButton) -> None:
-        # sourcery skip: extract-method
-        """
-        Handles the event of the user selecting a bot from the dropdown menu. This function manages the state of frame_left buttons,
-        the contents that appears in frame_right, and re-assigns the model to the controller.
-        Args:
-            bot_key: The name/key of the bot that the user selected.
-            btn: The button that the user clicked.
-        """
-        if self.models[bot_key] is None:
-            return
-        # If the script's frame is already visible, hide it
-        if self.controller.model == self.models[bot_key]:
-            self.controller.model.progress = 0
-            self.controller.update_progress()
-            self.controller.change_model(None)
-            self.views["Script"].pack_forget()
-            self.current_btn.configure(fg_color=self.DEFAULT_GRAY)
-            self.current_btn = None
-            self.current_home_view.pack(
-                in_=self.frame_right,
-                side=tkinter.TOP,
-                fill=tkinter.BOTH,
-                expand=True,
-                padx=0,
-                pady=0,
-            )
-        # If there is no script selected
-        elif self.controller.model is None:
-            self.current_home_view.pack_forget()
-            self.controller.change_model(self.models[bot_key])
-            self.views["Script"].pack(
-                in_=self.frame_right,
-                side=tkinter.TOP,
-                fill=tkinter.BOTH,
-                expand=True,
-                padx=0,
-                pady=0,
-            )
-            self.current_btn = btn
-            self.current_btn.configure(fg_color=btn._hover_color)
-        # If we are switching to a new script
-        else:
-            self.controller.model.progress = 0
-            self.controller.update_progress()
-            self.controller.change_model(self.models[bot_key])
-            self.current_btn.configure(fg_color=self.DEFAULT_GRAY)
-            self.current_btn = btn
-            self.current_btn.configure(fg_color=btn._hover_color)
+        window.after(100, window.lift)
 
     # ============ Misc Handlers ============
     def on_closing(self, event=0):

@@ -92,6 +92,9 @@ class Bot(ABC):
         self.game_title = game_title
         self.bot_title = bot_title
         self.description = description
+        self.primary_skill: Optional[str] = (
+            None  # Skill icon to show in menu (e.g., "fishing", "mining")
+        )
         self.options_builder = OptionsBuilder(bot_title)
         self.win = window
         # Wire up mouse with window for focus checks

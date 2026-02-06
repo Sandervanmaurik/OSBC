@@ -20,6 +20,7 @@ class AgilityBot(OSRSBot):
         bot_title = "Agility Bot"
         description = "Completes agility courses automatically."
         super().__init__(bot_title=bot_title, description=description)
+        self.primary_skill = "agility"
 
         self.obstacle_color = clr.GREEN
         self.mark_color = clr.RED

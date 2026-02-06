@@ -56,6 +56,7 @@ class OSRSFishing(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             "Supports dropping raw shrimp. Uses behavior system for natural actions."
         )
         super().__init__(bot_title=bot_title, description=description)
+        self.primary_skill = "fishing"
 
         self.running_time = 60  # minutes
         self.take_breaks = False

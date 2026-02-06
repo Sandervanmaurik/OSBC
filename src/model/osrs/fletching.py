@@ -39,6 +39,7 @@ class OSRSFletching(OSRSBot):
             "Fast, human-like clicking with short breaks and no camera movement."
         )
         super().__init__(bot_title=bot_title, description=description)
+        self.primary_skill = "fletching"
 
         self.running_time = 60  # minutes
         self.fletching_method = "Headless arrows"

@@ -78,6 +78,7 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             "Uses behavior system for natural actions."
         )
         super().__init__(bot_title=bot_title, description=description)
+        self.primary_skill = "mining"
 
         self.running_time = 60  # minutes
         self.take_breaks = False
