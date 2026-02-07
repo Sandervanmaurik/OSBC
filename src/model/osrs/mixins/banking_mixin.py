@@ -4,8 +4,8 @@ BankingMixin - Shared banking operations for OSRS bots.
 Provides common banking functionality:
 - Opening bank (with camera rotation retry)
 - Detecting bank UI
-- Depositing items (shift-click)
-- Withdrawing items
+- Depositing items (shift-click or by item name)
+- Withdrawing items (by item name)
 - Bank slot detection
 
 Extracted from cooking/crafting bots to eliminate duplication.
@@ -13,7 +13,7 @@ Extracted from cooking/crafting bots to eliminate duplication.
 
 import random
 import time
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict, TYPE_CHECKING
 
 import utilities.color as clr
 import utilities.ocr as ocr
@@ -21,6 +21,9 @@ import utilities.random_util as rd
 from model.bot import BotStatus
 from model.runelite_bot import RuneLiteObject
 from utilities.window import BankDetectionError
+
+if TYPE_CHECKING:
+    from model.osrs.mixins.bot_protocol import BotProtocol
 
 
 class BankingMixin:
@@ -33,7 +36,29 @@ class BankingMixin:
     - self.status: BotStatus
     - self.log_msg(), self.get_nearest_tag(), self.mouseover_text()
     - self._safe_key_press(), _safe_key_down(), _safe_key_up()
+    - self.get_template_path() (from TemplateMixin)
+    - self.find_items_in_inventory() (from ItemInteractionMixin)
+    - self.find_item_in_bank() (from ItemInteractionMixin)
     """
+
+    if TYPE_CHECKING:
+        from utilities.behavior import BehaviorManager
+        from model.runelite_bot import RuneLiteWindow
+
+        behavior: "BehaviorManager"
+        win: "RuneLiteWindow"
+        status: BotStatus
+
+        def log_msg(self: "BotProtocol", msg: str, overwrite: bool = False) -> None: ...
+        def get_template_path(
+            self: "BotProtocol", filename: str, category: str = "items"
+        ) -> str: ...
+        def find_items_in_inventory(
+            self: "BotProtocol", template_path: str, confidence: float = 0.3
+        ) -> List[int]: ...
+        def find_item_in_bank(
+            self: "BotProtocol", template_path: str, confidence: float = 0.3
+        ): ...
 
     def open_bank(
         self, tag_color: Union[str, object, None] = None, max_attempts: int = 3
@@ -174,6 +199,106 @@ class BankingMixin:
             self._safe_key_up("shift")
 
         self.behavior.timing.sleep((0.3, 0.7))
+        return True
+
+    def deposit_items(
+        self: "BotProtocol",
+        items: Dict[str, Union[int, str]],
+        exclude_slots: Optional[List[int]] = None,
+    ) -> bool:
+        """
+        Deposit items from inventory by template name.
+
+        Args:
+            items: Dict mapping item template names to quantities
+                   e.g., {"cooked_shrimp.png": "all", "burnt_fish.png": "all"}
+                   Currently only "all" is supported (shift-click deposit)
+            exclude_slots: Inventory slots to never deposit (e.g., [0] for catalyst)
+
+        Returns:
+            True if deposit successful, False otherwise
+
+        Example:
+            # Deposit all cooked/burnt fish, but keep item in slot 0
+            self.deposit_items(
+                {"cooked_shrimp.png": "all", "burnt_fish.png": "all"},
+                exclude_slots=[0]
+            )
+        """
+        if not items:
+            return True  # Nothing to deposit
+
+        slots_to_deposit = []
+
+        for template_name, quantity in items.items():
+            # Get full template path
+            template_path = self.get_template_path(template_name, category="items")
+
+            # Find items in inventory
+            item_slots = self.find_items_in_inventory(template_path, confidence=0.3)
+
+            # Apply exclusion filter
+            if exclude_slots:
+                item_slots = [slot for slot in item_slots if slot not in exclude_slots]
+
+            # For "all", we only need one slot per item type (shift-click deposits all)
+            if quantity == "all" and item_slots:
+                slots_to_deposit.append(item_slots[0])
+            # Future: support specific quantities
+            # elif isinstance(quantity, int):
+            #     slots_to_deposit.extend(item_slots[:quantity])
+
+        if not slots_to_deposit:
+            self.log_msg("No items found to deposit")
+            return True  # Not an error if nothing to deposit
+
+        self.log_msg(f"Depositing {len(slots_to_deposit)} item type(s)...")
+        return self.deposit_items_shift_click(slots_to_deposit)
+
+    def withdraw_items(self: "BotProtocol", items: Dict[str, Union[int, str]]) -> bool:
+        """
+        Withdraw items from bank by template name.
+
+        Args:
+            items: Dict mapping item template names to quantities
+                   e.g., {"raw_shrimp.png": "all"}
+                   Currently only "all" is supported (single left-click withdraws 28)
+
+        Returns:
+            True if all withdrawals successful, False otherwise
+
+        Example:
+            # Withdraw raw shrimp (fills inventory)
+            self.withdraw_items({"raw_shrimp.png": "all"})
+        """
+        if not items:
+            return True
+
+        for template_name, quantity in items.items():
+            # Get full template path
+            template_path = self.get_template_path(template_name, category="items")
+
+            # Find item in bank
+            result = self.find_item_in_bank(template_path, confidence=0.05)
+
+            if not result:
+                self.log_msg(f"{template_name} not found in bank! Stopping...")
+                return False
+
+            bank_slot, slot_index = result
+
+            # For "all", single left-click withdraws 28 items (default behavior)
+            if quantity == "all":
+                self.log_msg(f"Withdrawing {template_name}...")
+                self.behavior.mouse.move_to(bank_slot.random_point(), mouseSpeed="fast")
+                self.behavior.timing.sleep((0.1, 0.2))
+                self.behavior.mouse.click()
+                self.behavior.timing.sleep((0.3, 0.6))
+            # Future: support specific quantities with right-click menu
+            # elif isinstance(quantity, int):
+            #     # Right-click -> Withdraw-X -> Type quantity
+            #     pass
+
         return True
 
     def ensure_bank_slots_detected(self) -> bool:

@@ -1,12 +1,8 @@
 from typing import Dict, Tuple, List, Optional
-import os
-import random
 import time
 from model.bot import BotStatus
 from model.osrs.osrs_bot import OSRSBot
-from model.runelite_bot import RuneLiteObject
 import utilities.color as clr
-import utilities.random_util as rd
 
 # === Import behavior system ===
 from utilities.behavior.config import BotBehaviorConfig
@@ -17,7 +13,11 @@ class OSRSCooking(OSRSBot):
     """
     Cooking bot for OSRS - bank-standing activities.
 
-    Workflow:
+    Supports two cooking methods:
+    1. Cook fish: Use raw fish on range/fire → wait for "Cooking"
+    2. Make rations: Use cooked chicken on maple leaves → wait for "Making"
+
+    Workflow (Cook fish):
     1. Check for raw fish in inventory
     2. If have raw fish → cook on range/fire
     3. If no raw fish → bank (deposit cooked/burnt, withdraw raw)
@@ -25,16 +25,26 @@ class OSRSCooking(OSRSBot):
     5. Wait for "Cooking" text via ActionWatcher
     6. Repeat
 
+    Workflow (Make rations):
+    1. Maple leaves stay in slot 0 (stackable, never deposited)
+    2. Check for cooked chicken in inventory
+    3. If have chicken → use on maple leaves → wait for "Making"
+    4. If no chicken → bank (deposit rations, withdraw chicken)
+    5. Repeat
+
     USES BEHAVIOR SYSTEM:
     - BehaviorManager with bank-standing profile
     - Ultra-minimal camera movement
     - Human-like timing patterns
-    - ActionWatcher for "Cooking" text detection
+    - ActionWatcher for "Cooking"/"Making" text detection
 
     INHERITS FROM OSRSBot:
     - All mixins (TemplateMixin, BankingMixin, ItemInteractionMixin, ActionWaitingMixin)
     - Template validation, banking, item interaction, action waiting
     """
+
+    # Cooking methods available
+    COOKING_METHODS = ["Cook fish", "Make rations"]
 
     FISH_TYPES = [
         "Raw shrimp",
@@ -59,12 +69,23 @@ class OSRSCooking(OSRSBot):
 
     BURNT_TEMPLATE = "burnt_fish.png"
 
+    # Ration templates: (input_template, catalyst_template, output_template)
+    # Catalyst (maple leaves) stays in inventory slot 0, never deposited
+    RATION_TEMPLATES = {
+        "input": "cooked_chicken.png",
+        "catalyst": "maple_leaves.png",
+        "output": "foresters_ration.png",
+    }
+
+    # Catalyst slot - maple leaves always stay here (stackable)
+    CATALYST_SLOT = 0
+
     def __init__(self) -> None:
         bot_title = "Cooking"
         description = (
-            "Cooks raw fish on a range or fire. "
+            "Cooks raw fish on a range or fire, or makes rations. "
             "Bank-standing with human-like behavior. "
-            "Requires GREEN-tagged bank and PURPLE-tagged range/fire."
+            "Requires GREEN-tagged bank. Fish cooking requires PURPLE-tagged range/fire."
         )
 
         # === Configure behavior system ===
@@ -102,10 +123,11 @@ class OSRSCooking(OSRSBot):
         self.primary_skill = "cooking"
 
         self.running_time = 60  # minutes
+        self.cooking_method = "Cook fish"  # Default cooking method
         self.fish_type = "Raw shrimp"  # Default fish type
         self.options = {}  # Initialize options dict for reload_model() transfer
         print(
-            f"[INIT DEBUG] Bot instance created, fish_type default = {self.fish_type}"
+            f"[INIT DEBUG] Bot instance created, cooking_method={self.cooking_method}, fish_type={self.fish_type}"
         )
 
         # Enable default options
@@ -115,12 +137,21 @@ class OSRSCooking(OSRSBot):
         self._cooking_start_timeout = 4.0
         self._cooking_end_timeout = 90.0  # Full inventory can take ~60-80s
 
+        # Ration-making timeouts
+        self._making_start_timeout = 4.0
+        self._making_end_timeout = 90.0  # Full inventory can take ~60-90s
+
     def create_options(self) -> None:
         self.options_builder.add_slider_option(
             "running_time", "How long to run (minutes)?", 10, 500
         )
         self.options_builder.add_dropdown_option(
-            "fish_type", "Fish type", self.FISH_TYPES
+            "cooking_method", "Cooking method", self.COOKING_METHODS
+        )
+        # Only show fish type if "Cook fish" is selected
+        # Note: For "Make rations", no sub-selection needed (only Forester's ration exists)
+        self.options_builder.add_dropdown_option(
+            "fish_type", "Fish type (for Cook fish)", self.FISH_TYPES
         )
 
     def save_options(self, options: dict) -> None:
@@ -133,28 +164,38 @@ class OSRSCooking(OSRSBot):
             if option == "running_time":
                 self.running_time = int(options[option])
                 self.log_msg(f"[DEBUG] Set running_time = {self.running_time}")
+            elif option == "cooking_method":
+                self.cooking_method = options[option]
+                self.log_msg(f"[OPTIONS] Cooking method: {self.cooking_method}")
             elif option == "fish_type":
                 self.log_msg(f"[OPTIONS] Received fish_type: '{options[option]}'")
                 self.fish_type = options[option]
-                # Validate template lookup immediately
-                templates = self.ITEM_TEMPLATES.get(self.fish_type)
-                if templates:
-                    raw_template, cooked_template = templates
-                    self.log_msg(
-                        f"[OPTIONS] Templates: raw={raw_template}, cooked={cooked_template}"
-                    )
-                else:
-                    self.log_msg(
-                        f"[OPTIONS] ERROR: No templates for '{self.fish_type}'!"
-                    )
+                # Validate template lookup immediately (only relevant for Cook fish)
+                if self.cooking_method == "Cook fish":
+                    templates = self.ITEM_TEMPLATES.get(self.fish_type)
+                    if templates:
+                        raw_template, cooked_template = templates
+                        self.log_msg(
+                            f"[OPTIONS] Templates: raw={raw_template}, cooked={cooked_template}"
+                        )
+                    else:
+                        self.log_msg(
+                            f"[OPTIONS] ERROR: No templates for '{self.fish_type}'!"
+                        )
             else:
                 self.log_msg(f"Unknown option: {option}")
                 self.options_set = False
                 return
 
         self.log_msg(f"Running time: {self.running_time} minutes")
-        self.log_msg(f"Fish type: {self.fish_type}")
-        self.log_msg(f"[DEBUG] After save_options, self.fish_type = '{self.fish_type}'")
+        self.log_msg(f"Cooking method: {self.cooking_method}")
+        if self.cooking_method == "Cook fish":
+            self.log_msg(f"Fish type: {self.fish_type}")
+        else:
+            self.log_msg("Making Forester's rations (cooked chicken + maple leaves)")
+        self.log_msg(
+            f"[DEBUG] After save_options: cooking_method={self.cooking_method}, fish_type={self.fish_type}"
+        )
         self.options_set = True
 
     def _define_item_templates(self) -> Dict[str, Tuple[str, str]]:
@@ -165,8 +206,12 @@ class OSRSCooking(OSRSBot):
         """
         Main cooking loop with behavior system integration.
         Uses mixins for banking, item interaction, and action waiting.
+        Supports both fish cooking and ration making.
         """
-        self.log_msg(f"[MAIN_LOOP START] cooking '{self.fish_type}'")
+        if self.cooking_method == "Cook fish":
+            self.log_msg(f"[MAIN_LOOP START] cooking '{self.fish_type}'")
+        else:
+            self.log_msg("[MAIN_LOOP START] making Forester's rations")
 
         try:
             self.log_msg("[DEBUG] Step 1: Checking inventory ready...")
@@ -175,10 +220,16 @@ class OSRSCooking(OSRSBot):
                     "Inventory slots unavailable. Open the inventory tab and try again."
                 )
                 return
-            if not self.validate_templates(self.fish_type):
-                self.log_msg("Template validation failed - stopping bot")
-                self.set_status(BotStatus.STOPPED)
-                return
+
+            # Template validation depends on cooking method
+            if self.cooking_method == "Cook fish":
+                if not self.validate_templates(self.fish_type):
+                    self.log_msg("Template validation failed - stopping bot")
+                    self.set_status(BotStatus.STOPPED)
+                    return
+            # Note: For rations, we skip validate_templates since RATION_TEMPLATES
+            # doesn't follow the same structure as ITEM_TEMPLATES
+
             self._open_inventory_tab()
             self.behavior.log_stats_summary(self.log_msg)
             if hasattr(self, "controller") and self.controller:
@@ -196,7 +247,7 @@ class OSRSCooking(OSRSBot):
         stats_log_interval = 30  # 30 seconds
 
         with self.timed_session(self.running_time) as session:
-            self.behavior.start_fidgeting(self)
+            # self.behavior.start_fidgeting(self)
             try:
                 while session.running:
                     if self._should_stop():
@@ -214,23 +265,27 @@ class OSRSCooking(OSRSBot):
                             self.controller.update_behavior_display(stats=stats)
                         last_stats_log = now
 
-                    # Main cooking cycle
-                    if not self._cooking_cycle():
+                    # Main cycle - branch based on cooking method
+                    if self.cooking_method == "Cook fish":
+                        cycle_success = self._cook_fish_cycle()
+                    else:
+                        cycle_success = self._make_rations_cycle()
+
+                    if not cycle_success:
                         # === Use behavior system for sleep ===
                         self.behavior.timing.sleep((0.15, 0.4))
                         continue
 
                     session.increment("cycles")
             finally:
-                self.behavior.stop_fidgeting()
+                self.log_msg("Cooking session complete.")
 
-        self.log_msg("Cooking session complete.")
         if self.status == BotStatus.RUNNING:
             self.set_status(BotStatus.STOPPED)
 
-    def _cooking_cycle(self) -> bool:
+    def _cook_fish_cycle(self) -> bool:
         """
-        Main cooking cycle: check raw fish -> cook or bank.
+        Fish cooking cycle: check raw fish -> cook or bank.
         Uses mixins for all operations.
         """
         templates = self.get_templates(self.fish_type)  # Uses TemplateMixin
@@ -259,45 +314,20 @@ class OSRSCooking(OSRSBot):
         Cook fish by using raw fish on range/fire.
         Uses ItemInteractionMixin and ActionWaitingMixin.
         """
-        # Find PURPLE-tagged range/fire
-        range_obj = self.get_nearest_tag(clr.PURPLE)
-        if range_obj is None:
+        templates = self.get_templates(self.fish_type)
+        if not templates:
+            return False
+        raw_template, _ = templates
+
+        # Use item on tagged object (pauses fidgeting automatically)
+        if not self.use_item_on_tagged_object(
+            raw_template, clr.PURPLE, action_keywords=["Cook", "Range", "Fire", "Use"]
+        ):
             return False
 
-        # Pause fidgeting for the cooking action sequence
-        self.behavior.pause_fidgeting()
-
-        try:
-            # Click a raw fish in inventory first
-            raw_slot = random.choice(raw_slots)
-            if not self.click_inventory_slot(
-                raw_slot, speed="fastest"
-            ):  # Uses ItemInteractionMixin
-                return False
-            self.behavior.timing.sleep((0.03, 0.08))
-
-            # Click the range/fire
-            self.behavior.mouse.move_to(
-                range_obj.random_point(),
-                mouseSpeed=random.choice(["fast", "fastest"]),
-            )
-            self.behavior.timing.sleep((0.2, 0.5))
-
-            # Verify hover text
-            if not self.mouseover_text(contains=["Cook", "Range", "Fire", "Use"]):
-                self.log_msg(
-                    "Hover text doesn't match cooking target, clicking anyway..."
-                )
-
-            self.behavior.mouse.click()
-            self.behavior.timing.sleep((0.3, 0.6))
-
-            # Press spacebar with randomized delay (uses ItemInteractionMixin)
-            if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
-                return False
-        finally:
-            # Resume fidgeting after item interaction is complete
-            self.behavior.resume_fidgeting()
+        # Press spacebar to confirm
+        if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
+            return False
 
         # Wait for "Cooking" to start (uses ActionWaitingMixin)
         if not self.wait_for_action_start("Cooking", 4.0):
@@ -314,7 +344,7 @@ class OSRSCooking(OSRSBot):
     def _handle_banking(self, raw_template: str, cooked_template: str) -> bool:
         """
         Handle banking: deposit cooked/burnt fish, then withdraw raw fish.
-        Uses BankingMixin and ItemInteractionMixin.
+        Uses BankingMixin.
         """
         # Open bank (uses BankingMixin)
         if not self.open_bank(tag_color="green"):
@@ -327,63 +357,13 @@ class OSRSCooking(OSRSBot):
             self._safe_key_press("escape")
             return False
 
-        # Find cooked + burnt fish
-        cooked_path = self.get_template_path(cooked_template, category="items")
-        burnt_path = self.get_template_path(self.BURNT_TEMPLATE, category="items")
-
-        cooked_slots = self.find_items_in_inventory(cooked_path, confidence=0.3)
-
-        # Try to find burnt fish (template might not exist)
-        burnt_slots = []
-        if os.path.exists(burnt_path):
-            burnt_slots = self.find_items_in_inventory(burnt_path, confidence=0.3)
-        else:
-            self.log_msg(f"Burnt fish template not found (this is OK): {burnt_path}")
-
-        total_products = len(cooked_slots) + len(burnt_slots)
-
         # Deposit cooked/burnt fish (uses BankingMixin)
-        # Only need to shift-click ONE slot per item type (deposits all of that type)
-        slots_to_deposit = []
-        if cooked_slots:
-            slots_to_deposit.append(cooked_slots[0])  # One cooked fish deposits all
-        if burnt_slots:
-            slots_to_deposit.append(burnt_slots[0])  # One burnt fish deposits all
+        if not self.deposit_items({cooked_template: "all", self.BURNT_TEMPLATE: "all"}):
+            self._safe_key_press("escape")
+            return False
 
-        if slots_to_deposit:
-            self.log_msg(
-                f"Found {len(cooked_slots)} cooked + {len(burnt_slots)} burnt, depositing..."
-            )
-            if not self.deposit_items_shift_click(slots_to_deposit):
-                self._safe_key_press("escape")
-                return False
-            self.behavior.timing.sleep((0.3, 0.7))
-
-        # Withdraw raw fish
-        return self._withdraw_raw_fish(raw_template)
-
-    def _withdraw_raw_fish(self, raw_template: str) -> bool:
-        """
-        Withdraw raw fish from bank.
-        Bank must already be open. Uses ItemInteractionMixin.
-        """
-        self.log_msg(f"Withdrawing {raw_template}...")
-        raw_path = self.get_template_path(raw_template, category="items")
-
-        # Find raw fish in bank (uses ItemInteractionMixin)
-        # Bank items need higher confidence (more lenient) due to rendering differences
-        # 0.0 = perfect match (strict), 1.0 = any match (lenient)
-        # Karambwan specifically needs very high confidence (0.95) - may need bank-specific template
-        result = self.find_item_in_bank(raw_path, confidence=0.05)
-
-        if result:
-            raw_slot, slot_index = result
-            self.behavior.mouse.move_to(raw_slot.random_point(), mouseSpeed="fast")
-            self.behavior.timing.sleep((0.1, 0.2))
-            self.behavior.mouse.click()
-            self.behavior.timing.sleep((0.3, 0.6))
-        else:
-            self.log_msg(f"{raw_template} not found in bank! Stopping...")
+        # Withdraw raw fish (uses BankingMixin)
+        if not self.withdraw_items({raw_template: "all"}):
             self._safe_key_press("escape")
             return False
 
@@ -391,6 +371,154 @@ class OSRSCooking(OSRSBot):
         self._safe_key_press("escape")
         self.behavior.timing.sleep((0.4, 0.9))
         return True
+
+    # ========== RATION MAKING METHODS ==========
+
+    def _make_rations_cycle(self) -> bool:
+        """
+        Ration making cycle: check items -> make or bank.
+        Uses mixins for all operations.
+        """
+        # Get template paths
+        input_template = self.RATION_TEMPLATES["input"]
+        catalyst_template = self.RATION_TEMPLATES["catalyst"]
+        output_template = self.RATION_TEMPLATES["output"]
+
+        input_path = self.get_template_path("cooked_chicken.png", category="items")
+        catalyst_path = self.get_template_path("maple_leaves.png", category="items")
+
+        # Find items in inventory
+        # Catalyst (maple leaves) should always be in slot 0
+        catalyst_slots = self.find_items_in_inventory(catalyst_path, confidence=0.1)
+
+        # Find input items (cooked chicken) in slots 1-27
+        all_input_slots = self.find_items_in_inventory(input_path, confidence=0.1)
+        # Exclude catalyst slot (slot 0) from input slots
+        input_slots = [slot for slot in all_input_slots if slot != self.CATALYST_SLOT]
+
+        # Check if we need to bank (either missing catalyst or missing input)
+        missing_catalyst = not catalyst_slots
+        missing_input = not input_slots
+
+        if missing_catalyst or missing_input:
+            if missing_catalyst:
+                self.log_msg("No maple leaves, need to visit bank...")
+            if missing_input:
+                self.log_msg("No cooked chicken, need to visit bank...")
+            return self._handle_rations_banking(
+                output_template,
+                input_template,
+                catalyst_template,
+                missing_catalyst,
+                missing_input,
+            )
+
+        # We have both items, let's make rations
+        return self._make_rations(input_slots)
+
+    def _make_rations(self, input_slots: List[int]) -> bool:
+        """
+        Make rations by using cooked chicken on maple leaves.
+        Uses ItemInteractionMixin and ActionWaitingMixin.
+        """
+        input_template = self.RATION_TEMPLATES["input"]
+        catalyst_template = self.RATION_TEMPLATES["catalyst"]
+
+        # Use item on item (pauses fidgeting automatically)
+        if not self.use_item_on_item(input_template, catalyst_template):
+            return False
+
+        # Press spacebar to confirm
+        if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
+            return False
+
+        # Wait for "Making" to start (uses ActionWaitingMixin)
+        if not self.wait_for_action_start("Making", self._making_start_timeout):
+            # Try spacebar again
+            if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
+                return False
+            if not self.wait_for_action_start("Making", self._making_start_timeout):
+                self.log_msg("Making did not start (no 'Making' text).")
+                return False
+
+        # Wait for making to end (uses ActionWaitingMixin)
+        return self.wait_for_action_end("Making", self._making_end_timeout)
+
+    def _handle_rations_banking(
+        self,
+        output_template: str,
+        input_template: str,
+        catalyst_template: str,
+        missing_catalyst: bool,
+        missing_input: bool,
+    ) -> bool:
+        """
+        Handle banking for rations: deposit rations, withdraw missing items.
+        Uses BankingMixin.
+
+        Args:
+            output_template: Template for finished rations
+            input_template: Template for cooked chicken
+            catalyst_template: Template for maple leaves
+            missing_catalyst: Whether maple leaves need to be withdrawn
+            missing_input: Whether cooked chicken needs to be withdrawn
+
+        CRITICAL: Only deposit maple leaves if we're withdrawing them fresh.
+        """
+        # Open bank (uses BankingMixin)
+        if not self.open_bank(tag_color="green"):
+            self.log_msg("Failed to open bank.")
+            return False
+
+        # Ensure bank slots detected (uses BankingMixin)
+        if not self.ensure_bank_slots_detected():
+            self.log_msg("Cannot perform banking: bank slot detection failed.")
+            self._safe_key_press("escape")
+            return False
+
+        # Deposit rations (exclude slot 0 if maple leaves are already there)
+        # If missing catalyst, we'll deposit everything and withdraw fresh
+        if missing_catalyst:
+            # Deposit all rations (maple leaves will be withdrawn fresh)
+            if not self.deposit_items({output_template: "all"}):
+                self._safe_key_press("escape")
+                return False
+        else:
+            # Deposit rations but preserve maple leaves in slot 0
+            if not self.deposit_items(
+                {output_template: "all"}, exclude_slots=[self.CATALYST_SLOT]
+            ):
+                self._safe_key_press("escape")
+                return False
+
+        # Withdraw items based on what's missing
+        # CRITICAL: Always withdraw catalyst (maple leaves) FIRST to ensure slot 0
+
+        if missing_catalyst:
+            self.log_msg("Withdrawing maple leaves...")
+            # Use "all" for stackable items (withdraws the stack)
+            if not self.withdraw_items({catalyst_template: "all"}):
+                self._safe_key_press("escape")
+                return False
+
+        if missing_input:
+            self.log_msg("Withdrawing cooked chicken...")
+            if not self.withdraw_items({input_template: "all"}):
+                self._safe_key_press("escape")
+                return False
+
+        if missing_input:
+            self.log_msg("Withdrawing cooked chicken...")
+            if not self.withdraw_items({input_template: "all"}):
+                self._safe_key_press("escape")
+                return False
+
+        # Close bank
+        self._safe_key_press("escape")
+        self.behavior.timing.sleep((0.4, 0.9))
+        return True
+
+    # ========== UTILITY METHODS ==========
 
     def _open_inventory_tab(self) -> None:
         """Open inventory tab."""

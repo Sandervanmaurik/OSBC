@@ -567,7 +567,7 @@ class Window:
         click_w = SLOT_W - 2 * CLICK_OFFSET_X
         click_h = SLOT_H - 2 * CLICK_OFFSET_Y
 
-        for row in range(8):
+        for row in range(14):
             for col in range(8):
                 slot_x = grid_start_x + col * (SLOT_W + GAP_X) + CLICK_OFFSET_X
                 slot_y = grid_start_y + row * (SLOT_H + GAP_Y) + CLICK_OFFSET_Y
