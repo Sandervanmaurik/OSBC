@@ -12,36 +12,13 @@ Extracted from cooking/crafting bots to eliminate duplication.
 """
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from model.bot import BotStatus
 
 if TYPE_CHECKING:
     from utilities.behavior import BehaviorManager
-
-
-class ActionWaitingMixin:
-    """
-    Mixin providing shared action waiting operations.
-
-    This mixin expects to be mixed into a bot class that provides:
-    - self.behavior: BehaviorManager
-    - self.status: BotStatus
-    - self.log_msg()
-    """
-
-    # Type hints for attributes/methods provided by the bot class
-    if TYPE_CHECKING:
-        behavior: "BehaviorManager"
-        status: BotStatus
-
-        def log_msg(self, msg: str, overwrite: bool = False) -> None: ...
-
-
-import time
-from typing import Optional
-
-from model.bot import BotStatus
+    from model.osrs.mixins.bot_protocol import BotProtocol
 
 
 class ActionWaitingMixin:
@@ -57,8 +34,14 @@ class ActionWaitingMixin:
     - self.status (BotStatus)
     """
 
+    if TYPE_CHECKING:
+        behavior: "BehaviorManager"
+        status: BotStatus
+
+        def log_msg(self: "BotProtocol", msg: str, overwrite: bool = False) -> None: ...
+
     def wait_for_action_start(
-        self, action_name: str, timeout_seconds: float = 4.0
+        self: "BotProtocol", action_name: str, timeout_seconds: float = 4.0
     ) -> bool:
         """
         Wait for a specific action to start.
@@ -87,13 +70,16 @@ class ActionWaitingMixin:
                 )
                 return True
 
-            # Poll delay
-            self.behavior.timing.sleep((0.08, 0.18))
+            # Poll delay using semantic helper
+            self.action_poll_delay()
 
         return False
 
     def wait_for_action_end(
-        self, action_name: str, timeout_seconds: float = 60.0, log_interval: float = 6.0
+        self: "BotProtocol",
+        action_name: str,
+        timeout_seconds: float = 60.0,
+        log_interval: float = 6.0,
     ) -> bool:
         """
         Wait for a specific action to end.
@@ -141,13 +127,13 @@ class ActionWaitingMixin:
 
                 last_log = time.time()
 
-            # Poll delay
-            self.behavior.timing.sleep((0.2, 0.6))
+            # Poll delay using semantic helper for action progress
+            self.action_progress_poll_delay()
 
         self.log_msg(f"{action_name} wait timed out; retrying cycle.")
         return False
 
-    def is_performing_action(self, action_name: str) -> bool:
+    def is_performing_action(self: "BotProtocol", action_name: str) -> bool:
         """
         Check if bot is currently performing a specific action.
 

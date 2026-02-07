@@ -9,8 +9,8 @@ from model.bot import BotStatus
 from model.osrs.osrs_bot import OSRSBot
 from utilities.geometry import Rectangle
 
-# === NEW: Import behavior system ===
-from utilities.behavior import BehaviorManager
+# === Import behavior system ===
+from utilities.behavior.config import BotBehaviorConfig
 
 
 class OSRSFletching(OSRSBot):
@@ -38,36 +38,10 @@ class OSRSFletching(OSRSBot):
             "Fletches headless arrows by combining feathers with arrow shafts. "
             "Fast, human-like clicking with short breaks and no camera movement."
         )
-        super().__init__(bot_title=bot_title, description=description)
-        self.primary_skill = "fletching"
 
-        self.options = {}  # Initialize for reload_model() check
-        self.running_time = 60  # minutes
-        self.fletching_method = "Headless arrows"
-
-        # Enable default options - can be customized via Options button
-        self.options_set = True
-
-        self._item_confidence = 0.3
-        self._missing_item_cycles = 0
-        self._max_missing_cycles = 3
-
-        self._prefer_primary_first = True
-        self._order_flip_chance = 0.25
-
-        # Break timing
-        self._next_break_at = 0.0
-        self._break_min = 2.0
-        self._break_max = 12.0
-
-        # Fletching timeouts
-        self._attaching_start_timeout = 3.0
-        self._attaching_end_timeout = 55.0
-
-        # === NEW: Initialize behavior system ===
+        # === Configure behavior system ===
         # Use "high-active" profile with customizations for fletching
-        self.behavior = BehaviorManager(
-            bot=self,
+        behavior_config = BotBehaviorConfig(
             profile="high-active",  # Fast, efficient profile
             custom_config={
                 "timing": {
@@ -93,6 +67,36 @@ class OSRSFletching(OSRSBot):
                 },
             },
         )
+
+        super().__init__(
+            bot_title=bot_title,
+            description=description,
+            behavior_config=behavior_config,
+        )
+        self.primary_skill = "fletching"
+
+        self.options = {}  # Initialize for reload_model() check
+        self.running_time = 60  # minutes
+        self.fletching_method = "Headless arrows"
+
+        # Enable default options - can be customized via Options button
+        self.options_set = True
+
+        self._item_confidence = 0.3
+        self._missing_item_cycles = 0
+        self._max_missing_cycles = 3
+
+        self._prefer_primary_first = True
+        self._order_flip_chance = 0.25
+
+        # Break timing
+        self._next_break_at = 0.0
+        self._break_min = 2.0
+        self._break_max = 12.0
+
+        # Fletching timeouts
+        self._attaching_start_timeout = 3.0
+        self._attaching_end_timeout = 55.0
 
     def create_options(self) -> None:
         self.options_builder.add_slider_option(

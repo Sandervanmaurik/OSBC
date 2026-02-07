@@ -19,45 +19,7 @@ from utilities.geometry import Rectangle
 if TYPE_CHECKING:
     from utilities.behavior import BehaviorManager
     from model.runelite_bot import RuneLiteWindow
-
-
-class ItemInteractionMixin:
-    """
-    Mixin providing shared item interaction operations.
-
-    This mixin expects to be mixed into a bot class that provides:
-    - self.behavior: BehaviorManager
-    - self.win: RuneLiteWindow
-    - self.log_msg(), self._safe_key_press()
-    - self.find_item_in_inventory_visual(), self.find_item_in_bank_visual()
-    """
-
-    # Type hints for attributes/methods provided by the bot class
-    if TYPE_CHECKING:
-        behavior: "BehaviorManager"
-        win: "RuneLiteWindow"
-
-        def log_msg(self, msg: str, overwrite: bool = False) -> None: ...
-        def _safe_key_press(self, key: str) -> bool: ...
-        def find_item_in_inventory_visual(
-            self,
-            template_path: str,
-            confidence: float,
-            crop_bottom_portion: float = 0.7,
-        ) -> List[int]: ...
-        def find_item_in_bank_visual(
-            self,
-            template_path: str,
-            confidence: float,
-            crop_bottom_portion: float = 0.7,
-        ) -> Optional[Tuple[Rectangle, int]]: ...
-
-
-import random
-from typing import List, Optional, Tuple
-
-import utilities.random_util as rd
-from utilities.geometry import Rectangle
+    from model.osrs.mixins.bot_protocol import BotProtocol
 
 
 class ItemInteractionMixin:
@@ -73,7 +35,28 @@ class ItemInteractionMixin:
     - self._safe_key_press() method
     """
 
-    def click_inventory_slot(self, slot_index: int, speed: str = "fastest") -> bool:
+    if TYPE_CHECKING:
+        behavior: "BehaviorManager"
+        win: "RuneLiteWindow"
+
+        def log_msg(self: "BotProtocol", msg: str, overwrite: bool = False) -> None: ...
+        def _safe_key_press(self: "BotProtocol", key: str) -> bool: ...
+        def find_item_in_inventory_visual(
+            self: "BotProtocol",
+            template_path: str,
+            confidence: float,
+            crop_bottom_portion: float = 0.7,
+        ) -> List[int]: ...
+        def find_item_in_bank_visual(
+            self: "BotProtocol",
+            template_path: str,
+            confidence: float,
+            crop_bottom_portion: float = 0.7,
+        ) -> Optional[Tuple[Rectangle, int]]: ...
+
+    def click_inventory_slot(
+        self: "BotProtocol", slot_index: int, speed: str = "fastest"
+    ) -> bool:
         """
         Click an inventory slot with human-like behavior.
 
@@ -93,8 +76,8 @@ class ItemInteractionMixin:
             click_point = slot.random_point()
             # Use behavior system for mouse movement
             self.behavior.mouse.move_to(click_point, mouseSpeed=speed)
-            # Pre-click delay
-            self.behavior.timing.sleep((0.02, 0.06))
+            # Pre-click delay using semantic helper
+            self.interaction_pre_click_delay()
             # Click
             self.behavior.mouse.click()
             return True
@@ -103,7 +86,10 @@ class ItemInteractionMixin:
             return False
 
     def use_item_on_item(
-        self, primary_slot: int, secondary_slot: int, randomize_order: bool = True
+        self: "BotProtocol",
+        primary_slot: int,
+        secondary_slot: int,
+        randomize_order: bool = True,
     ) -> bool:
         """
         Use one item on another with fidget pause/resume.
@@ -119,10 +105,8 @@ class ItemInteractionMixin:
         Returns:
             True if interaction successful, False otherwise
         """
-        # Pause fidgeting for entire interaction sequence
-        self.behavior.pause_fidgeting()
-
-        try:
+        # Use context manager to pause fidgeting for entire interaction
+        with self.with_paused_fidgeting():
             # Randomize click order 50% of the time
             if randomize_order and random.random() < 0.5:
                 first_slot, second_slot = secondary_slot, primary_slot
@@ -133,20 +117,17 @@ class ItemInteractionMixin:
             if not self.click_inventory_slot(first_slot):
                 return False
 
-            # Micro-delay between clicks
-            self.behavior.timing.sleep((0.03, 0.08))
+            # Micro-delay between clicks using semantic helper
+            self.interaction_between_clicks_delay()
 
             # Click second item
             if not self.click_inventory_slot(second_slot):
                 return False
 
             return True
-        finally:
-            # Always resume fidgeting
-            self.behavior.resume_fidgeting()
 
     def press_space_to_confirm(
-        self, delay_range: Tuple[float, float] = (0.5, 1.5)
+        self: "BotProtocol", delay_range: Tuple[float, float] = (0.5, 1.5)
     ) -> bool:
         """
         Press spacebar with randomized delay.
@@ -177,7 +158,7 @@ class ItemInteractionMixin:
         return True
 
     def find_items_in_inventory(
-        self, template_path: str, confidence: float = 0.3
+        self: "BotProtocol", template_path: str, confidence: float = 0.3
     ) -> List[int]:
         """
         Find items in inventory using template matching.
@@ -198,7 +179,7 @@ class ItemInteractionMixin:
         )
 
     def find_item_in_bank(
-        self, template_path: str, confidence: float = 0.3
+        self: "BotProtocol", template_path: str, confidence: float = 0.3
     ) -> Optional[Tuple[Rectangle, int]]:
         """
         Find item in bank using template matching.

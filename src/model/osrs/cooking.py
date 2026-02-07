@@ -9,7 +9,7 @@ import utilities.color as clr
 import utilities.random_util as rd
 
 # === Import behavior system ===
-from utilities.behavior import BehaviorManager
+from utilities.behavior.config import BotBehaviorConfig
 from utilities.behavior.profiles import MouseProfile, CameraProfile
 
 
@@ -66,27 +66,10 @@ class OSRSCooking(OSRSBot):
             "Bank-standing with human-like behavior. "
             "Requires GREEN-tagged bank and PURPLE-tagged range/fire."
         )
-        super().__init__(bot_title=bot_title, description=description)
-        self.primary_skill = "cooking"
 
-        self.running_time = 60  # minutes
-        self.fish_type = "Raw shrimp"  # Default fish type
-        self.options = {}  # Initialize options dict for reload_model() transfer
-        print(
-            f"[INIT DEBUG] Bot instance created, fish_type default = {self.fish_type}"
-        )
-
-        # Enable default options
-        self.options_set = True
-
-        # Cooking timeouts
-        self._cooking_start_timeout = 4.0
-        self._cooking_end_timeout = 90.0  # Full inventory can take ~60-80s
-
-        # === Initialize behavior system ===
+        # === Configure behavior system ===
         # Bank-standing profiles: minimal camera, frequent mouse fidgeting
-        self.behavior = BehaviorManager(
-            bot=self,
+        behavior_config = BotBehaviorConfig(
             profile="high-active",  # Fast, efficient profile
             mouse_profile=MouseProfile.BANK_STANDING,
             camera_profile=CameraProfile.BANK_STANDING,
@@ -110,6 +93,27 @@ class OSRSCooking(OSRSBot):
                 },
             },
         )
+
+        super().__init__(
+            bot_title=bot_title,
+            description=description,
+            behavior_config=behavior_config,
+        )
+        self.primary_skill = "cooking"
+
+        self.running_time = 60  # minutes
+        self.fish_type = "Raw shrimp"  # Default fish type
+        self.options = {}  # Initialize options dict for reload_model() transfer
+        print(
+            f"[INIT DEBUG] Bot instance created, fish_type default = {self.fish_type}"
+        )
+
+        # Enable default options
+        self.options_set = True
+
+        # Cooking timeouts
+        self._cooking_start_timeout = 4.0
+        self._cooking_end_timeout = 90.0  # Full inventory can take ~60-80s
 
     def create_options(self) -> None:
         self.options_builder.add_slider_option(

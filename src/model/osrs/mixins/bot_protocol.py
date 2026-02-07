@@ -6,11 +6,15 @@ Using Protocol allows type checkers (mypy) to verify that mixins have access
 to required methods without creating circular dependencies.
 """
 
-from typing import Protocol, Optional, List, runtime_checkable
+from typing import Protocol, Optional, List, runtime_checkable, TYPE_CHECKING
 from utilities.geometry import Rectangle
 import utilities.color as clr
 from model.bot import BotStatus
 from model.runelite_bot import RuneLiteObject
+
+if TYPE_CHECKING:
+    from utilities.behavior.manager import BehaviorManager
+    from model.runelite_bot import RuneLiteWindow
 
 
 @runtime_checkable
@@ -20,11 +24,20 @@ class BotProtocol(Protocol):
 
     This allows type checkers to verify that mixins can safely call methods
     on self, even though the mixin doesn't directly inherit from the bot class.
+
+    Required Dependencies for Mixins:
+    - BehaviorManager: Provides timing, randomization, fidgeting control
+    - RuneLiteWindow: Provides game window geometry and UI element access
+    - BotStatus: Current bot state (RUNNING, STOPPED, etc.)
+    - log_msg: Logging capability
+    - Safe key operations: For keyboard input
+    - RuneLite object detection: For game object interaction
+    - Visual detection: For inventory/bank item finding
     """
 
     # Required attributes
-    behavior: "BehaviorManager"  # type: ignore
-    win: "RuneLiteWindow"  # type: ignore
+    behavior: "BehaviorManager"
+    win: "RuneLiteWindow"
     status: BotStatus
 
     # Logging

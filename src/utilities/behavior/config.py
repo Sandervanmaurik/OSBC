@@ -1,7 +1,10 @@
 """Configuration dataclasses and utilities for behavior system."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from utilities.behavior.profiles import MouseProfile, CameraProfile
 
 
 @dataclass
@@ -172,3 +175,70 @@ class BehaviorConfig:
             breaks={**self.breaks, **custom.get("breaks", {})},
         )
         return merged
+
+
+@dataclass
+class BotBehaviorConfig:
+    """
+    Configuration for bot BehaviorManager initialization.
+
+    Provides a type-safe way to configure bot behavior when creating
+    a bot instance. Bots can pass this to OSRSBot.__init__.
+
+    Attributes:
+        profile: Behavior profile name ("cautious", "active", "high-active", etc.)
+        mouse_profile: Optional mouse activity profile (fidgeting frequency)
+        camera_profile: Optional camera movement profile
+        custom_config: Optional dict to override specific profile settings
+
+    Example:
+        # Bank-standing bot with minimal camera movement
+        from utilities.behavior.config import BotBehaviorConfig
+        from utilities.behavior.profiles import MouseProfile, CameraProfile
+
+        config = BotBehaviorConfig(
+            profile="high-active",
+            mouse_profile=MouseProfile.BANK_STANDING,
+            camera_profile=CameraProfile.BANK_STANDING,
+            custom_config={
+                "timing": {"speed_multiplier": 0.9},
+                "action": {"misclick_chance": 0.05},
+            }
+        )
+
+        # Pass to OSRSBot
+        super().__init__(
+            bot_title="Cooking",
+            description="...",
+            behavior_config=config,
+        )
+    """
+
+    profile: str = "active"
+    mouse_profile: Optional["MouseProfile"] = None
+    camera_profile: Optional["CameraProfile"] = None
+    custom_config: Optional[Dict[str, Any]] = None
+
+    def to_kwargs(self) -> Dict[str, Any]:
+        """
+        Convert to kwargs dict for BehaviorManager.__init__.
+
+        Returns:
+            Dictionary with keys matching BehaviorManager.__init__ parameters
+
+        Example:
+            config = BotBehaviorConfig(profile="high-active")
+            manager = BehaviorManager(bot, **config.to_kwargs())
+        """
+        kwargs: Dict[str, Any] = {"profile": self.profile}
+
+        if self.mouse_profile is not None:
+            kwargs["mouse_profile"] = self.mouse_profile
+
+        if self.camera_profile is not None:
+            kwargs["camera_profile"] = self.camera_profile
+
+        if self.custom_config is not None:
+            kwargs["custom_config"] = self.custom_config
+
+        return kwargs

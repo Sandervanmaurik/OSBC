@@ -35,10 +35,11 @@ Profiles:
 
 from utilities.behavior.manager import BehaviorManager
 from utilities.behavior.profiles import BehaviorProfiles
-from utilities.behavior.config import BehaviorConfig
+from utilities.behavior.config import BehaviorConfig, BotBehaviorConfig
 
 __all__ = [
     "BehaviorManager",
     "BehaviorProfiles",
     "BehaviorConfig",
+    "BotBehaviorConfig",
 ]

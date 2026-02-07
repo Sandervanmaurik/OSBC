@@ -13,11 +13,14 @@ from utilities.osrs_skills import skill_index, skill_names
 from model.runelite_bot import RuneLiteBot, RuneLiteWindow
 from model.skills import SkillsManager
 from model.osrs.mixins import (
+    BehaviorHelpersMixin,
     TemplateMixin,
     BankingMixin,
     ItemInteractionMixin,
     ActionWaitingMixin,
 )
+from utilities.behavior.manager import BehaviorManager
+from utilities.behavior.config import BotBehaviorConfig
 
 if TYPE_CHECKING:
     from utilities.xp_watcher import XPWatcher
@@ -49,18 +52,31 @@ def validate_types(func: Callable[..., T]) -> Callable[..., T]:
 
 
 class OSRSBot(
+    BehaviorHelpersMixin,
     TemplateMixin,
     BankingMixin,
     ItemInteractionMixin,
     ActionWaitingMixin,
-    RuneLiteBot,  # Keep last for proper MRO
+    RuneLiteBot,
     metaclass=ABCMeta,
 ):
     win: RuneLiteWindow = None
+    behavior: BehaviorManager
 
-    def __init__(self, bot_title: str, description: str) -> None:
+    def __init__(
+        self,
+        bot_title: str,
+        description: str,
+        behavior_config: Optional[BotBehaviorConfig] = None,
+    ) -> None:
         window = RuneLiteWindow("RuneLite")
         super().__init__("OSRS", bot_title, description, window)
+
+        # Initialize BehaviorManager centrally (DRY - no longer needed in each concrete bot)
+        if behavior_config is None:
+            behavior_config = BotBehaviorConfig()  # Use default configuration
+        self.behavior = BehaviorManager(self, **behavior_config.to_kwargs())
+
         # Note: skill_levels is now a property that delegates to SkillsManager
         self._xp_watcher: Optional[XPWatcher] = None
         self._action_watcher = None  # Initialized in on_start()

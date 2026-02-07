@@ -6,7 +6,7 @@ from model.bot import BotStatus
 from model.osrs.osrs_bot import OSRSBot
 
 # === Import behavior system ===
-from utilities.behavior import BehaviorManager
+from utilities.behavior.config import BotBehaviorConfig
 from utilities.behavior.profiles import MouseProfile, CameraProfile
 
 
@@ -15,16 +15,7 @@ class OSRSCrafting(OSRSBot):
     Crafting bot for OSRS - bank-standing activities.
 
     Current method: Cutting gems (chisel + uncut gem → cut gem)
-
-    MIGRATED TO BEHAVIOR SYSTEM:
-    - Uses BehaviorManager with "focused" profile
-    - Ultra-minimal camera movement (1-20 min intervals for bank-standing)
-    - Smart chisel detection (only withdraw if missing)
-    - Item click order randomization
-    - Text-based activity monitoring ("Cutting")
-    - Handles crushed gems as byproducts
-    """
-
+    """ 
     CRAFTING_METHODS = ["Cutting gems"]
 
     GEM_TYPES = ["Opal", "Sapphire", "Emerald", "Ruby", "Diamond"]
@@ -46,34 +37,10 @@ class OSRSCrafting(OSRSBot):
             "Supports multiple gem types with crushed gem handling. "
             "Ultra-minimal camera movement, human-like timing patterns."
         )
-        super().__init__(bot_title=bot_title, description=description)
-        self.primary_skill = "crafting"
 
-        self.options = {}  # Initialize for reload_model() check
-        self.running_time = 60  # minutes
-        self.crafting_method = "Cutting gems"
-        self.gem_type = "Opal"  # Default gem type
-
-        # Enable default options
-        self.options_set = True
-
-        self._item_confidence = 0.1
-        self._inventory_item_confidence = 0.1
-        self._missing_item_cycles = 0
-        self._max_missing_cycles = 3
-
-        # Item click order randomization
-        self._prefer_chisel_first = True
-        self._order_flip_chance = 0.25
-
-        # Crafting timeouts
-        self._cutting_start_timeout = 3.0
-        self._cutting_end_timeout = 55.0
-
-        # === Initialize behavior system ===
+        # === Configure behavior system ===
         # Bank-standing profiles: minimal camera, frequent mouse fidgeting
-        self.behavior = BehaviorManager(
-            bot=self,
+        behavior_config = BotBehaviorConfig(
             profile="high-active",  # Fast, efficient profile
             mouse_profile=MouseProfile.BANK_STANDING,
             camera_profile=CameraProfile.BANK_STANDING,
@@ -97,6 +64,34 @@ class OSRSCrafting(OSRSBot):
                 },
             },
         )
+
+        super().__init__(
+            bot_title=bot_title,
+            description=description,
+            behavior_config=behavior_config,
+        )
+        self.primary_skill = "crafting"
+
+        self.options = {}  # Initialize for reload_model() check
+        self.running_time = 60  # minutes
+        self.crafting_method = "Cutting gems"
+        self.gem_type = "Opal"  # Default gem type
+
+        # Enable default options
+        self.options_set = True
+
+        self._item_confidence = 0.1
+        self._inventory_item_confidence = 0.1
+        self._missing_item_cycles = 0
+        self._max_missing_cycles = 3
+
+        # Item click order randomization
+        self._prefer_chisel_first = True
+        self._order_flip_chance = 0.25
+
+        # Crafting timeouts
+        self._cutting_start_timeout = 3.0
+        self._cutting_end_timeout = 55.0
 
     def create_options(self) -> None:
         self.options_builder.add_slider_option(
@@ -255,10 +250,18 @@ class OSRSCrafting(OSRSBot):
             self.log_msg(
                 f"Found {len(cut_gem_slots)} cut gems and {len(crushed_gem_slots)} crushed gems, depositing..."
             )
-            # Deposit specific slots using BankingMixin
-            all_product_slots = cut_gem_slots + crushed_gem_slots
+            # Shift-click deposits ALL items of that type, so we only need to click one slot per item type
+            # One click for cut gems, one click for crushed gems (2 clicks total max)
+            unique_product_slots = []
+            if cut_gem_slots:
+                unique_product_slots.append(cut_gem_slots[0])  # One cut gem slot
+            if crushed_gem_slots:
+                unique_product_slots.append(
+                    crushed_gem_slots[0]
+                )  # One crushed gem slot
+
             if not self.deposit_items_shift_click(
-                all_product_slots
+                unique_product_slots
             ):  # Uses BankingMixin
                 return False
 
@@ -346,15 +349,11 @@ class OSRSCrafting(OSRSBot):
             return False
 
         # Wait for "Cutting" to start - ActionWaitingMixin
-        if not self.wait_for_action_start(
-            "Cutting", self._cutting_start_timeout
-        ):
+        if not self.wait_for_action_start("Cutting", self._cutting_start_timeout):
             # Try spacebar again
             if not self.press_space_to_confirm():
                 return False
-            if not self.wait_for_action_start(
-                "Cutting", self._cutting_start_timeout
-            ):
+            if not self.wait_for_action_start("Cutting", self._cutting_start_timeout):
                 self.log_msg("Crafting did not start (no 'Cutting' text).")
                 return False
 

@@ -14,7 +14,7 @@ from utilities.geometry import Point, RuneLiteObject
 from utilities.osrs_bot_utils import OSRSBotBehaviorMixin
 
 # === Import behavior system ===
-from utilities.behavior import BehaviorManager
+from utilities.behavior.config import BotBehaviorConfig
 from utilities.behavior.profiles import MouseProfile, CameraProfile
 
 
@@ -77,30 +77,9 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
             "Supports dropping inventory; banking is reserved for a later version. "
             "Uses behavior system for natural actions."
         )
-        super().__init__(bot_title=bot_title, description=description)
-        self.primary_skill = "mining"
 
-        self.running_time = 60  # minutes
-        self.take_breaks = False
-        self.ore_type = "Any"
-        self.ore_tag_color_name = "Pink"
-        self.bank_tag_color_name = "Green"
-        self.inventory_mode = "Drop"
-
-        # Enable default options - can be customized via Options button
-        self.options_set = True
-
-        self._last_camera_move = 0.0
-        self._last_random_action = 0.0
-        self._camera_interval = 0.0
-        self._action_interval = 0.0
-        self._recovery_stage = 0
-        self._idle_timeout = 25.0
-        self._progress_timeout = 90.0
-
-        # === Initialize behavior system ===
-        self.behavior = BehaviorManager(
-            bot=self,
+        # === Configure behavior system ===
+        behavior_config = BotBehaviorConfig(
             profile="low-active",  # Balanced for active gameplay
             mouse_profile=MouseProfile.ACTIVE,
             camera_profile=CameraProfile.ACTIVE,
@@ -126,6 +105,31 @@ class OSRSMining(OSRSBotBehaviorMixin, OSRSBot, launcher.Launchable):
                 },
             },
         )
+
+        super().__init__(
+            bot_title=bot_title,
+            description=description,
+            behavior_config=behavior_config,
+        )
+        self.primary_skill = "mining"
+
+        self.running_time = 60  # minutes
+        self.take_breaks = False
+        self.ore_type = "Any"
+        self.ore_tag_color_name = "Pink"
+        self.bank_tag_color_name = "Green"
+        self.inventory_mode = "Drop"
+
+        # Enable default options - can be customized via Options button
+        self.options_set = True
+
+        self._last_camera_move = 0.0
+        self._last_random_action = 0.0
+        self._camera_interval = 0.0
+        self._action_interval = 0.0
+        self._recovery_stage = 0
+        self._idle_timeout = 25.0
+        self._progress_timeout = 90.0
 
     def create_options(self) -> None:
         self.options_builder.add_slider_option(

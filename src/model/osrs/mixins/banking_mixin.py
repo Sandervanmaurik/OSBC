@@ -72,7 +72,7 @@ class BankingMixin:
 
         # Move to bank and click
         self.behavior.mouse.move_to(bank.random_point(), mouseSpeed="medium")
-        self.behavior.timing.sleep((0.2, 0.6))
+        self.banking_hesitation()
 
         # Verify mouseover text
         if not self.mouseover_text(contains=["Bank", "Deposit"]):
@@ -83,7 +83,7 @@ class BankingMixin:
             if bank is None:
                 return False
             self.behavior.mouse.move_to(bank.random_point(), mouseSpeed="medium")
-            self.behavior.timing.sleep((0.2, 0.5))
+            self.banking_hesitation()
             if not self.mouseover_text(contains=["Bank", "Deposit"]):
                 return False
 
@@ -145,7 +145,7 @@ class BankingMixin:
                     self.behavior.mouse.move_to(slot.random_point(), mouseSpeed="fast")
                     self.behavior.timing.sleep((0.05, 0.1))
                     self.behavior.mouse.click()
-                    self.behavior.timing.sleep((0.15, 0.3))
+                    self.banking_click_delay()
         finally:
             self._safe_key_up("shift")
 
@@ -237,7 +237,7 @@ class BankingMixin:
                 return False
             if self.is_bank_open():
                 return True
-            self.behavior.timing.sleep((0.12, 0.25))
+            self.banking_wait_open_poll()
         return False
 
     def _rotate_camera_search(self) -> None:
