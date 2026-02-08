@@ -418,13 +418,15 @@ class BehaviorManager:
         if self._fidget_started:
             return  # Already running
 
-        # Random startup delay (1-5s) to feel more natural
+        # Random startup delay (1-5s) to feel more natural - moved to background thread
         startup_delay = random.uniform(1.0, 5.0)
-        time.sleep(startup_delay)
 
         self._fidget_stop_event = threading.Event()
         self._fidget_thread = threading.Thread(
-            target=self._fidget_loop, args=(bot,), daemon=True, name="MouseFidget"
+            target=self._fidget_loop,
+            args=(bot, startup_delay),
+            daemon=True,
+            name="MouseFidget",
         )
         self._fidget_thread.start()
         self._fidget_started = True
@@ -457,13 +459,26 @@ class BehaviorManager:
         """Resume fidgeting after critical actions are complete."""
         self._fidget_paused = False
 
-    def _fidget_loop(self, bot) -> None:
+    def _fidget_loop(self, bot, startup_delay: float = 0.0) -> None:
         """
         Background loop for continuous mouse fidgeting.
         Runs until stop_fidgeting() is called.
         Pauses when _fidget_paused is True.
+
+        Args:
+            bot: Bot instance for mouse control
+            startup_delay: Delay before first fidget (non-blocking in background)
         """
         import utilities.random_util as rd
+
+        # Sleep for startup delay in background (non-blocking)
+        if startup_delay > 0:
+            slept = 0.0
+            while slept < startup_delay and not self._fidget_stop_event.is_set():
+                time.sleep(0.5)
+                slept += 0.5
+            if self._fidget_stop_event.is_set():
+                return
 
         while not self._fidget_stop_event.is_set():
             # Generate random interval from profile range

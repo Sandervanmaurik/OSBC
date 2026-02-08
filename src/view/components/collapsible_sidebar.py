@@ -28,17 +28,20 @@ class CollapsibleSidebar(customtkinter.CTkFrame):
         parent,
         on_toggle: Optional[Callable[[bool], None]] = None,
         on_settings: Optional[Callable[[], None]] = None,
+        on_chain_builder: Optional[Callable[[], None]] = None,
     ):
         """
         Args:
             parent: Parent widget
             on_toggle: Callback when sidebar is toggled (receives is_collapsed bool)
             on_settings: Callback when settings button is clicked
+            on_chain_builder: Callback when chain builder button is clicked
         """
         super().__init__(parent, fg_color="#242424", corner_radius=0)
 
         self.on_toggle_callback = on_toggle
         self.on_settings_callback = on_settings
+        self.on_chain_builder_callback = on_chain_builder
         self.is_collapsed = False
 
         # Store script buttons for toggle updates
@@ -47,7 +50,8 @@ class CollapsibleSidebar(customtkinter.CTkFrame):
         # Configure layout
         self.rowconfigure(0, weight=0)  # Toggle button
         self.rowconfigure(1, weight=1)  # Script list (expandable)
-        self.rowconfigure(2, weight=0)  # Settings button
+        self.rowconfigure(2, weight=0)  # Chain builder button
+        self.rowconfigure(3, weight=0)  # Settings button
         self.columnconfigure(0, weight=1)
 
         # Load icons
@@ -92,6 +96,20 @@ class CollapsibleSidebar(customtkinter.CTkFrame):
         self.scripts_frame.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="nsew")
         self.scripts_frame.columnconfigure(0, weight=1)
 
+        # Chain Builder button
+        self.btn_chain_builder = customtkinter.CTkButton(
+            self,
+            text="🔗 Chains",
+            command=self._on_chain_builder_clicked,
+            width=160,
+            height=40,
+            fg_color="#2E2E2E",
+            hover_color="#3A3A3A",
+            font=("Roboto", 14),
+            corner_radius=6,
+        )
+        self.btn_chain_builder.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="ew")
+
         # Bottom: Settings button
         self.btn_settings = customtkinter.CTkButton(
             self,
@@ -105,7 +123,7 @@ class CollapsibleSidebar(customtkinter.CTkFrame):
             font=("Roboto", 18),
             corner_radius=6,
         )
-        self.btn_settings.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="ew")
+        self.btn_settings.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="ew")
 
     def add_script_button(self, script_id: str, button_widget):
         """
@@ -147,9 +165,11 @@ class CollapsibleSidebar(customtkinter.CTkFrame):
         # Update toggle and settings buttons
         if self.is_collapsed:
             self.btn_toggle.configure(text="☰", width=40)
+            self.btn_chain_builder.configure(text="🔗", width=40)
             self.btn_settings.configure(text="⚙", width=40)
         else:
             self.btn_toggle.configure(text="☰", width=160)
+            self.btn_chain_builder.configure(text="🔗 Chains", width=160)
             self.btn_settings.configure(text="⚙", width=160)
 
         # Notify parent
@@ -167,6 +187,11 @@ class CollapsibleSidebar(customtkinter.CTkFrame):
         """Handle settings button click."""
         if self.on_settings_callback:
             self.on_settings_callback()
+
+    def _on_chain_builder_clicked(self):
+        """Handle chain builder button click."""
+        if self.on_chain_builder_callback:
+            self.on_chain_builder_callback()
 
     def set_script_selected(self, script_id: str, selected: bool = True):
         """

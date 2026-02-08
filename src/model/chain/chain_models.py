@@ -34,6 +34,7 @@ class ChainEntry:
         order: Position in chain (0-indexed)
         status: Current execution status
         xp_gained: XP accumulated during execution
+        configured: Whether the entry has been configured via the options dialog
     """
 
     script_name: str
@@ -42,6 +43,7 @@ class ChainEntry:
     order: int = 0
     status: ChainEntryStatus = ChainEntryStatus.PENDING
     xp_gained: int = 0
+    configured: bool = False  # Track if user has configured this entry
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary."""
@@ -50,6 +52,7 @@ class ChainEntry:
             "running_time": self.running_time,
             "options": self.options,
             "order": self.order,
+            "configured": self.configured,
         }
 
     @staticmethod
@@ -60,6 +63,7 @@ class ChainEntry:
             running_time=data["running_time"],
             options=data.get("options", {}),
             order=data.get("order", 0),
+            configured=data.get("configured", False),
         )
 
 

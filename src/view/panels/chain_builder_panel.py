@@ -7,6 +7,7 @@ import customtkinter
 from typing import Dict, Callable, Optional
 from model.chain import ScriptChain, ChainEntry, save_chains, load_chains
 from view.components.chain_entry_card import ChainEntryCard
+from model.bot import Bot
 
 
 class ChainBuilderPanel(customtkinter.CTkFrame):
@@ -25,7 +26,7 @@ class ChainBuilderPanel(customtkinter.CTkFrame):
     def __init__(
         self,
         parent,
-        models: Dict[str, any],  # Map of bot_name -> Bot instance
+        models: Dict[str, Bot],  # Map of bot_name -> Bot instance
         on_run_chain: Callable[
             [ScriptChain], None
         ],  # Callback when Run Chain is clicked
@@ -284,7 +285,7 @@ class ChainBuilderPanel(customtkinter.CTkFrame):
             # Update up/down button states
             is_first = idx == 0
             is_last = idx == len(self.current_chain.entries) - 1
-            card.update_move_buttons(is_first, is_last)
+            card.set_button_states(can_move_up=not is_first, can_move_down=not is_last)
 
     def _configure_entry(self, entry: ChainEntry):
         """
@@ -300,21 +301,113 @@ class ChainBuilderPanel(customtkinter.CTkFrame):
         # Create options window
         options_window = customtkinter.CTkToplevel(self)
         options_window.title(f"Configure {bot.bot_title}")
-        options_window.geometry("600x500")
+        options_window.geometry("600x600")
         options_window.transient(self)
         options_window.grab_set()
 
+        # Main container
+        main_frame = customtkinter.CTkFrame(options_window, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # ============ Duration Configuration ============
+        duration_frame = customtkinter.CTkFrame(
+            main_frame, fg_color="#1A1A1A", corner_radius=8
+        )
+        duration_frame.pack(fill="x", pady=(0, 10))
+
+        duration_label = customtkinter.CTkLabel(
+            duration_frame,
+            text="Running Time (minutes):",
+            font=("Roboto Medium", 13),
+            anchor="w",
+        )
+        duration_label.pack(side="left", padx=15, pady=10)
+
+        duration_var = customtkinter.IntVar(value=entry.running_time)
+        duration_spinbox = customtkinter.CTkEntry(
+            duration_frame,
+            width=80,
+            textvariable=duration_var,
+            font=("Roboto", 13),
+        )
+        duration_spinbox.pack(side="left", padx=(0, 15), pady=10)
+
+        # Add +/- buttons
+        btn_decrease = customtkinter.CTkButton(
+            duration_frame,
+            text="-",
+            width=30,
+            command=lambda: duration_var.set(max(1, duration_var.get() - 1)),
+        )
+        btn_decrease.pack(side="left", padx=(0, 5), pady=10)
+
+        btn_increase = customtkinter.CTkButton(
+            duration_frame,
+            text="+",
+            width=30,
+            command=lambda: duration_var.set(min(180, duration_var.get() + 1)),
+        )
+        btn_increase.pack(side="left", padx=(0, 15), pady=10)
+
+        # ============ Bot Options ============
         # Build options UI using bot's create_options method
         options_builder = bot.create_options()
         if options_builder:
             # Temporarily override controller to capture options
             temp_controller = _OptionsCapture(entry)
-            options_ui = options_builder.build_ui(options_window, temp_controller)
-            options_ui.pack(fill="both", expand=True, padx=10, pady=10)
+            options_ui = options_builder.build_ui(main_frame, temp_controller)
+            options_ui.pack(fill="both", expand=True, pady=(0, 10))
 
             # Pre-fill existing options if any
             if entry.options:
                 _prefill_options(options_ui, entry.options)
+
+        # ============ Save/Cancel Buttons ============
+        button_frame = customtkinter.CTkFrame(main_frame, fg_color="transparent")
+        button_frame.pack(fill="x", pady=(10, 0))
+
+        def save_and_close():
+            # Validate duration input
+            try:
+                duration = duration_var.get()
+                # Ensure it's within valid range (1-180 minutes)
+                if not isinstance(duration, int) or duration < 1 or duration > 180:
+                    # Reset to current value if invalid
+                    duration_var.set(entry.running_time)
+                    return
+
+                # Update duration
+                entry.running_time = duration
+                # Mark as configured
+                entry.configured = True
+                # Options are already saved via _OptionsCapture
+                # Refresh the card display
+                self._refresh_entries()
+                self._update_total_time()
+                options_window.destroy()
+            except (ValueError, customtkinter.TclError):
+                # If user entered non-numeric value, reset to current value
+                duration_var.set(entry.running_time)
+
+        btn_save = customtkinter.CTkButton(
+            button_frame,
+            text="Save",
+            command=save_and_close,
+            fg_color="#2E7D32",
+            hover_color="#388E3C",
+            width=120,
+        )
+        btn_save.pack(side="right", padx=(10, 0))
+
+        btn_cancel = customtkinter.CTkButton(
+            button_frame,
+            text="Cancel",
+            command=options_window.destroy,
+            fg_color="#424242",
+            hover_color="#616161",
+            width=120,
+        )
+        btn_cancel.pack(side="right")
 
     def _remove_entry(self, entry: ChainEntry):
         """Remove an entry from the chain."""
@@ -446,7 +539,7 @@ class ChainBuilderPanel(customtkinter.CTkFrame):
 
         # Check if all entries are configured
         for entry in self.current_chain.entries:
-            if not entry.options:
+            if not entry.configured:
                 bot = self.models.get(entry.script_name)
                 bot_title = bot.bot_title if bot else entry.script_name
                 self._show_error(

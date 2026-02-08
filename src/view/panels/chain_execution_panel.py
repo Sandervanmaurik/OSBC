@@ -2,16 +2,18 @@
 ChainExecutionPanel - Displays progress during script chain execution.
 
 Shows:
-    - Current script name and progress
-    - Current script countdown timer
-    - Overall chain progress
-    - List of all scripts with status indicators
+    - Compact script items with status and time remaining
+    - Script log output
     - Stop button
+
+XP Gained and Current Action are shown in the right column.
 """
 
+import tkinter
 import customtkinter
 from typing import Optional
 from model.chain import ScriptChain, ChainEntry, ChainEntryStatus
+from view.fonts.fonts import log_font
 
 
 class ChainExecutionPanel(customtkinter.CTkFrame):
@@ -19,10 +21,12 @@ class ChainExecutionPanel(customtkinter.CTkFrame):
     Panel shown during chain execution.
 
     Displays:
-        - Chain name and overall progress
-        - Current script progress with countdown
-        - List of all scripts with status icons
+        - Compact chain progress with script items
+        - Script log
         - Stop button
+
+    Keyboard shortcuts:
+        - SHIFT+ENTER: Stop chain
     """
 
     def __init__(self, parent, on_stop_command):
@@ -35,128 +39,109 @@ class ChainExecutionPanel(customtkinter.CTkFrame):
 
         self.on_stop_command = on_stop_command
         self.current_chain: Optional[ScriptChain] = None
-        self.script_labels = []  # List of labels for each script
+        self.script_boxes = []  # List of script box frames
+        self._shortcut_bound = False  # Track if keyboard shortcut is bound
 
-        # Configure layout
-        self.rowconfigure(0, weight=0)  # Chain name
-        self.rowconfigure(1, weight=0)  # Overall progress bar
-        self.rowconfigure(2, weight=0)  # Overall progress label
-        self.rowconfigure(3, weight=0)  # Separator
-        self.rowconfigure(4, weight=0)  # Current script title
-        self.rowconfigure(5, weight=0)  # Current script progress
-        self.rowconfigure(6, weight=0)  # Current script countdown
-        self.rowconfigure(7, weight=0)  # Separator
-        self.rowconfigure(8, weight=1)  # Script list (scrollable)
-        self.rowconfigure(9, weight=0)  # Stop button
+        # Configure layout - much more compact
+        self.rowconfigure(0, weight=0)  # Chain header
+        self.rowconfigure(1, weight=0)  # Scripts container
+        self.rowconfigure(2, weight=0)  # Separator
+        self.rowconfigure(3, weight=0)  # Log label
+        self.rowconfigure(4, weight=1)  # Log (expandable)
+        self.rowconfigure(5, weight=0)  # Stop button
         self.columnconfigure(0, weight=1)
 
-        # ============ Chain Name ============
+        # ============ Chain Header ============
         self.lbl_chain_name = customtkinter.CTkLabel(
             self,
             text="Chain: ---",
-            font=("Roboto Medium", 18),
+            font=("Roboto Medium", 16),
             text_color="#DCE4EE",
             anchor="w",
         )
         self.lbl_chain_name.grid(row=0, column=0, sticky="ew", padx=20, pady=(15, 10))
 
-        # ============ Overall Progress Bar ============
-        self.lbl_overall = customtkinter.CTkLabel(
+        # ============ Scripts Container (Compact Boxes) ============
+        self.scripts_container = customtkinter.CTkScrollableFrame(
             self,
-            text="Overall Progress: 0%",
-            font=("Roboto", 12),
-            text_color="#A0A0A0",
-            anchor="w",
+            fg_color="#0F0F0F",
+            corner_radius=8,
+            height=140,  # Fixed compact height
+            scrollbar_button_color="#2E2E2E",
+            scrollbar_button_hover_color="#3A3A3A",
         )
-        self.lbl_overall.grid(row=1, column=0, sticky="ew", padx=20, pady=(5, 2))
-
-        self.progress_overall = customtkinter.CTkProgressBar(
-            self,
-            progress_color="#4A90E2",
-            fg_color="#2E2E2E",
-        )
-        self.progress_overall.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 10))
-        self.progress_overall.set(0)
+        self.scripts_container.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 10))
+        self.scripts_container.columnconfigure(0, weight=1)
 
         # ============ Separator ============
-        separator1 = customtkinter.CTkFrame(self, height=2, fg_color="#2E2E2E")
-        separator1.grid(row=3, column=0, sticky="ew", padx=20, pady=10)
+        separator = customtkinter.CTkFrame(self, height=2, fg_color="#2E2E2E")
+        separator.grid(row=2, column=0, sticky="ew", padx=20, pady=10)
 
-        # ============ Current Script ============
-        self.lbl_current_title = customtkinter.CTkLabel(
+        # ============ Script Log ============
+        log_label = customtkinter.CTkLabel(
             self,
-            text="Current Script: ---",
-            font=("Roboto Medium", 16),
-            text_color="#DCE4EE",
-            anchor="w",
-        )
-        self.lbl_current_title.grid(row=4, column=0, sticky="ew", padx=20, pady=(10, 5))
-
-        self.lbl_current_progress = customtkinter.CTkLabel(
-            self,
-            text="Progress: 0%",
-            font=("Roboto", 12),
-            text_color="#A0A0A0",
-            anchor="w",
-        )
-        self.lbl_current_progress.grid(
-            row=5, column=0, sticky="ew", padx=20, pady=(5, 2)
-        )
-
-        self.progress_current = customtkinter.CTkProgressBar(
-            self,
-            progress_color="#66BB6A",
-            fg_color="#2E2E2E",
-        )
-        self.progress_current.grid(row=6, column=0, sticky="ew", padx=20, pady=(0, 5))
-        self.progress_current.set(0)
-
-        self.lbl_countdown = customtkinter.CTkLabel(
-            self,
-            text="Time remaining: --:--",
-            font=("Roboto Medium", 13),
-            text_color="#FFA726",
-            anchor="w",
-        )
-        self.lbl_countdown.grid(row=7, column=0, sticky="ew", padx=20, pady=(5, 10))
-
-        # ============ Separator ============
-        separator2 = customtkinter.CTkFrame(self, height=2, fg_color="#2E2E2E")
-        separator2.grid(row=8, column=0, sticky="ew", padx=20, pady=10)
-
-        # ============ Scripts List ============
-        list_label = customtkinter.CTkLabel(
-            self,
-            text="Scripts in Chain:",
+            text="Script Log:",
             font=("Roboto Medium", 14),
             text_color="#DCE4EE",
             anchor="w",
         )
-        list_label.grid(row=9, column=0, sticky="ew", padx=20, pady=(10, 5))
+        log_label.grid(row=3, column=0, sticky="ew", padx=20, pady=(5, 5))
 
-        self.scrollable_scripts = customtkinter.CTkScrollableFrame(
-            self,
-            fg_color="#0F0F0F",
-            corner_radius=8,
+        # Log frame container
+        log_container = customtkinter.CTkFrame(
+            self, fg_color="#0F0F0F", corner_radius=8
         )
-        self.scrollable_scripts.grid(
-            row=10, column=0, sticky="nsew", padx=20, pady=(0, 10)
+        log_container.grid(row=4, column=0, sticky="nsew", padx=20, pady=(0, 10))
+        log_container.rowconfigure(0, weight=1)
+        log_container.columnconfigure(0, weight=1)
+
+        # Text Box for log
+        self.txt_log = tkinter.Text(
+            master=log_container,
+            wrap=tkinter.WORD,
+            font=log_font(),
+            bg="#343638",
+            fg="#ffffff",
+            padx=20,
+            pady=5,
+            spacing1=4,  # spacing before a line
+            spacing3=4,  # spacing after a line / wrapped line
+            cursor="arrow",
+            height=10,  # Initial height in lines
         )
-        self.scrollable_scripts.columnconfigure(0, weight=1)
+        self.txt_log.grid(row=0, column=0, sticky="nsew", padx=(5, 0), pady=5)
+        self.txt_log.configure(state=tkinter.DISABLED)
+
+        # Scrollbar for log
+        log_scrollbar = customtkinter.CTkScrollbar(
+            master=log_container, command=self.txt_log.yview
+        )
+        log_scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 5), pady=5)
+        self.txt_log.configure(yscrollcommand=log_scrollbar.set)
 
         # ============ Stop Button ============
         self.btn_stop = customtkinter.CTkButton(
             self,
-            text="⏹ Stop Chain",
+            text="⏹ Stop Chain (SHIFT+ENTER)",
             font=("Roboto Medium", 14),
             fg_color="#C62828",
             hover_color="#D32F2F",
             command=self._on_stop_clicked,
             height=40,
         )
-        self.btn_stop.grid(row=11, column=0, sticky="ew", padx=20, pady=(0, 15))
+        self.btn_stop.grid(row=5, column=0, sticky="ew", padx=20, pady=(0, 15))
 
     # ============ Public API ============
+
+    def show(self):
+        """Show the panel and bind keyboard shortcuts."""
+        self._bind_shortcuts()
+        # Grid is called by parent, this is just for shortcut binding
+
+    def hide(self):
+        """Hide the panel and unbind keyboard shortcuts."""
+        self._unbind_shortcuts()
+        # Ungrid is called by parent, this is just for shortcut unbinding
 
     def set_chain(self, chain: ScriptChain):
         """
@@ -166,18 +151,21 @@ class ChainExecutionPanel(customtkinter.CTkFrame):
             chain: ScriptChain being executed
         """
         self.current_chain = chain
-        self.lbl_chain_name.configure(text=f"Chain: {chain.name}")
-        self._build_script_list()
+        self.lbl_chain_name.configure(
+            text=f"Chain: {chain.name} ({len(chain.entries)} scripts)"
+        )
+        self._build_script_boxes()
+        self._bind_shortcuts()  # Ensure shortcuts are bound when chain starts
 
     def update_overall_progress(self, progress: float):
         """
-        Update overall chain progress.
+        Update overall chain progress (updates all script boxes).
 
         Args:
             progress: Progress value between 0.0 and 1.0
         """
-        self.progress_overall.set(progress)
-        self.lbl_overall.configure(text=f"Overall Progress: {progress * 100:.0f}%")
+        # Overall progress is shown via individual script statuses
+        pass
 
     def update_current_script(self, entry: ChainEntry, script_index: int):
         """
@@ -187,9 +175,9 @@ class ChainExecutionPanel(customtkinter.CTkFrame):
             entry: Currently executing ChainEntry
             script_index: Index of script in chain (0-based)
         """
-        self.lbl_current_title.configure(
-            text=f"Current Script: {entry.script_name} ({script_index + 1}/{len(self.current_chain.entries)})"
-        )
+        # Highlight the current script box
+        if script_index < len(self.script_boxes):
+            self._update_script_box(script_index, entry)
 
     def update_current_progress(self, progress: float, remaining_seconds: int):
         """
@@ -199,15 +187,12 @@ class ChainExecutionPanel(customtkinter.CTkFrame):
             progress: Progress value between 0.0 and 1.0
             remaining_seconds: Seconds remaining for current script
         """
-        self.progress_current.set(progress)
-        self.lbl_current_progress.configure(text=f"Progress: {progress * 100:.0f}%")
-
-        # Format countdown as MM:SS
-        minutes = remaining_seconds // 60
-        seconds = remaining_seconds % 60
-        self.lbl_countdown.configure(
-            text=f"Time remaining: {minutes:02d}:{seconds:02d}"
-        )
+        # Find the currently running script and update its box
+        for idx, entry in enumerate(self.current_chain.entries):
+            if entry.status == ChainEntryStatus.RUNNING:
+                if idx < len(self.script_boxes):
+                    self._update_script_box(idx, entry, progress, remaining_seconds)
+                break
 
     def update_script_status(self, script_index: int, status: ChainEntryStatus):
         """
@@ -217,55 +202,186 @@ class ChainExecutionPanel(customtkinter.CTkFrame):
             script_index: Index of script in chain
             status: New status
         """
-        if script_index < len(self.script_labels):
-            label = self.script_labels[script_index]
-            icon = self._get_status_icon(status)
-
-            # Update just the icon part (first character)
-            current_text = label.cget("text")
-            # Text format: "icon ScriptName (duration)"
-            parts = current_text.split(" ", 1)
-            if len(parts) == 2:
-                label.configure(text=f"{icon} {parts[1]}")
+        if script_index < len(self.script_boxes):
+            entry = self.current_chain.entries[script_index]
+            self._update_script_box(script_index, entry)
 
     def reset(self):
         """Reset panel to initial state."""
         self.lbl_chain_name.configure(text="Chain: ---")
-        self.lbl_current_title.configure(text="Current Script: ---")
-        self.lbl_current_progress.configure(text="Progress: 0%")
-        self.lbl_countdown.configure(text="Time remaining: --:--")
-        self.progress_overall.set(0)
-        self.progress_current.set(0)
-        self.lbl_overall.configure(text="Overall Progress: 0%")
 
-        # Clear script list
-        for label in self.script_labels:
-            label.destroy()
-        self.script_labels.clear()
+        # Clear script boxes
+        for box in self.script_boxes:
+            box.destroy()
+        self.script_boxes.clear()
+
+        # Clear log
+        self.clear_log()
+
+    def update_log(self, msg: str, overwrite: bool = False):
+        """
+        Update the script log with a message.
+
+        Args:
+            msg: Message to log
+            overwrite: If True, replace the last line
+        """
+        self.txt_log.configure(state=tkinter.NORMAL)
+        if overwrite:
+            self.txt_log.delete("end-1c linestart", "end")
+        self.txt_log.insert(tkinter.END, "\n" + msg)
+        self.txt_log.configure(state=tkinter.DISABLED)
+        self.txt_log.see(tkinter.END)
+
+    def clear_log(self):
+        """Clear the script log."""
+        self.txt_log.configure(state=tkinter.NORMAL)
+        self.txt_log.delete(1.0, tkinter.END)
+        self.txt_log.configure(state=tkinter.DISABLED)
+        self.txt_log.see(tkinter.END)
 
     # ============ Private Methods ============
 
-    def _build_script_list(self):
-        """Build the list of scripts with status icons."""
+    def _build_script_boxes(self):
+        """Build compact script boxes styled like XP gained boxes."""
         # Clear existing
-        for label in self.script_labels:
-            label.destroy()
-        self.script_labels.clear()
+        for box in self.script_boxes:
+            box.destroy()
+        self.script_boxes.clear()
 
-        # Create label for each script
+        # Create box for each script
         for idx, entry in enumerate(self.current_chain.entries):
-            icon = self._get_status_icon(entry.status)
-            text = f"{icon} {entry.script_name} ({entry.running_time} min)"
+            box = self._create_script_box(idx, entry)
+            self.script_boxes.append(box)
 
-            label = customtkinter.CTkLabel(
-                self.scrollable_scripts,
-                text=text,
-                font=("Roboto", 13),
-                text_color="#DCE4EE",
-                anchor="w",
-            )
-            label.grid(row=idx, column=0, sticky="ew", padx=10, pady=3)
-            self.script_labels.append(label)
+    def _create_script_box(self, idx: int, entry: ChainEntry) -> customtkinter.CTkFrame:
+        """
+        Create a compact script box with status, name, and time info.
+
+        Args:
+            idx: Index of script in chain
+            entry: ChainEntry to display
+
+        Returns:
+            The created frame widget
+        """
+        # Box frame (styled like XP gained boxes)
+        box = customtkinter.CTkFrame(
+            self.scripts_container,
+            fg_color="#2E2E2E",
+            corner_radius=6,
+            height=50,
+        )
+        box.pack(fill="x", padx=8, pady=4)
+        box.pack_propagate(False)
+        box.columnconfigure(1, weight=1)
+
+        # Status icon (left side)
+        icon = self._get_status_icon(entry.status)
+        lbl_icon = customtkinter.CTkLabel(
+            box,
+            text=icon,
+            font=("Roboto", 20),
+            width=30,
+        )
+        lbl_icon.grid(row=0, column=0, rowspan=2, padx=(10, 5), sticky="w")
+
+        # Script name (top right)
+        lbl_name = customtkinter.CTkLabel(
+            box,
+            text=f"{idx + 1}. {entry.script_name}",
+            font=("Roboto Medium", 13),
+            text_color="#DCE4EE",
+            anchor="w",
+        )
+        lbl_name.grid(row=0, column=1, sticky="ew", padx=5, pady=(8, 0))
+
+        # Time info (bottom right) - will show duration or time remaining
+        lbl_time = customtkinter.CTkLabel(
+            box,
+            text=f"Duration: {entry.running_time} min",
+            font=("Roboto", 11),
+            text_color="#A0A0A0",
+            anchor="w",
+        )
+        lbl_time.grid(row=1, column=1, sticky="ew", padx=5, pady=(0, 8))
+
+        # Progress indicator (right side) - only shown when running
+        lbl_progress = customtkinter.CTkLabel(
+            box,
+            text="",
+            font=("Roboto Medium", 11),
+            text_color="#66BB6A",
+            width=60,
+        )
+        lbl_progress.grid(row=0, column=2, rowspan=2, padx=(5, 10))
+
+        # Store references for updates
+        box.lbl_icon = lbl_icon
+        box.lbl_name = lbl_name
+        box.lbl_time = lbl_time
+        box.lbl_progress = lbl_progress
+
+        return box
+
+    def _update_script_box(
+        self,
+        idx: int,
+        entry: ChainEntry,
+        progress: float = None,
+        remaining_seconds: int = None,
+    ):
+        """
+        Update a script box with current status and progress.
+
+        Args:
+            idx: Index of script in chain
+            entry: ChainEntry with current status
+            progress: Optional progress value (0.0 to 1.0)
+            remaining_seconds: Optional seconds remaining
+        """
+        if idx >= len(self.script_boxes):
+            return
+
+        box = self.script_boxes[idx]
+
+        # Update status icon
+        icon = self._get_status_icon(entry.status)
+        box.lbl_icon.configure(text=icon)
+
+        # Update box color based on status
+        if entry.status == ChainEntryStatus.RUNNING:
+            box.configure(fg_color="#3A4A3A")  # Green tint for running
+        elif entry.status == ChainEntryStatus.COMPLETED:
+            box.configure(fg_color="#2E3E2E")  # Darker green for completed
+        elif entry.status == ChainEntryStatus.FAILED:
+            box.configure(fg_color="#4A2E2E")  # Red tint for failed
+        else:
+            box.configure(fg_color="#2E2E2E")  # Default gray
+
+        # Update time/progress info
+        if entry.status == ChainEntryStatus.RUNNING and remaining_seconds is not None:
+            # Show time remaining when running
+            minutes = int(remaining_seconds // 60)
+            seconds = int(remaining_seconds % 60)
+            box.lbl_time.configure(text=f"⏱ {minutes:02d}:{seconds:02d} remaining")
+
+            # Show progress percentage
+            if progress is not None:
+                box.lbl_progress.configure(text=f"{progress * 100:.0f}%")
+        elif entry.status == ChainEntryStatus.COMPLETED:
+            box.lbl_time.configure(text=f"✓ Completed ({entry.running_time} min)")
+            box.lbl_progress.configure(text="100%")
+        elif entry.status == ChainEntryStatus.FAILED:
+            box.lbl_time.configure(text=f"✗ Failed")
+            box.lbl_progress.configure(text="")
+        elif entry.status == ChainEntryStatus.SKIPPED:
+            box.lbl_time.configure(text=f"⏭ Skipped")
+            box.lbl_progress.configure(text="")
+        else:
+            # Pending - show duration
+            box.lbl_time.configure(text=f"Duration: {entry.running_time} min")
+            box.lbl_progress.configure(text="")
 
     def _get_status_icon(self, status: ChainEntryStatus) -> str:
         """
@@ -278,15 +394,48 @@ class ChainExecutionPanel(customtkinter.CTkFrame):
             Emoji string
         """
         status_icons = {
-            ChainEntryStatus.PENDING: "⏸️",  # Paused (waiting)
-            ChainEntryStatus.RUNNING: "▶️",  # Playing (running)
+            ChainEntryStatus.PENDING: "⏸",  # Paused (waiting)
+            ChainEntryStatus.RUNNING: "▶",  # Playing (running)
             ChainEntryStatus.COMPLETED: "✅",  # Checkmark (done)
-            ChainEntryStatus.SKIPPED: "⏭️",  # Skip (skipped)
+            ChainEntryStatus.SKIPPED: "⏭",  # Skip (skipped)
             ChainEntryStatus.FAILED: "❌",  # X (failed)
         }
-        return status_icons.get(status, "⏸️")
+        return status_icons.get(status, "⏸")
 
     def _on_stop_clicked(self):
         """Handle Stop button click."""
         if self.on_stop_command:
             self.on_stop_command()
+
+    def _bind_shortcuts(self):
+        """Bind keyboard shortcuts to the root window."""
+        if not self._shortcut_bound:
+            try:
+                # Get the root window (toplevel Tk/CTk window)
+                root = self.winfo_toplevel()
+                # Bind to the root window using standard tkinter bind
+                root.bind("<Shift-Return>", self._on_shortcut_stop, add=True)
+                self._shortcut_bound = True
+            except Exception as e:
+                print(f"[ChainExecutionPanel] Failed to bind shortcut: {e}")
+
+    def _unbind_shortcuts(self):
+        """Unbind keyboard shortcuts from the root window."""
+        if self._shortcut_bound:
+            try:
+                root = self.winfo_toplevel()
+                root.unbind("<Shift-Return>")
+                self._shortcut_bound = False
+            except Exception as e:
+                print(f"[ChainExecutionPanel] Failed to unbind shortcut: {e}")
+
+    def _on_shortcut_stop(self, event):
+        """Handle SHIFT+ENTER keyboard shortcut."""
+        self._on_stop_clicked()
+        return "break"  # Prevent event propagation
+
+    def destroy(self):
+        """Cleanup before destroying panel."""
+        # Unbind keyboard shortcuts
+        self._unbind_shortcuts()
+        super().destroy()
