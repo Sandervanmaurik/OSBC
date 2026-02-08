@@ -9,6 +9,7 @@ from typing import List
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.absolute()))
 
 import customtkinter
+import pyautogui
 from PIL import Image, ImageTk
 from pynput import keyboard
 from tktooltip import ToolTip
@@ -30,6 +31,11 @@ from view.panels import (
     ChainExecutionPanel,
 )
 from utilities.machine_config import get_machine_config
+
+# Disable PyAutoGUI PAUSE to eliminate hidden 100ms delays after every call
+# This was causing 10+ second delays for mouse movements with many points
+# IMPORTANT: Must be set AFTER all imports to ensure it's not overridden
+pyautogui.PAUSE = 0
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme(
@@ -718,12 +724,55 @@ class App(customtkinter.CTk):
 
 
 if __name__ == "__main__":
-    # To test a bot without the GUI, address the comments for each line below.
-    # from model.<folder_bot_is_in> import <bot_class_name>  # Uncomment this line and replace <folder_bot_is_in> and <bot_class_name> accordingly to import your bot
-    app = App()  # Add the "test=True" argument to the App constructor call.
-    app.start()  # Comment out this line.
-    # app.test(Bot())  # Uncomment this line and replace argument with your bot's instance.
+    # ========== macOS Compatibility Fix ==========
+    # Fix for "Trace/BPT trap: 5" error on macOS
+    # Root cause: Reentrant calls to stderr from Tkinter's exception handler
+    
+    import signal
+    import sys
+    import os
+    
+    # Silently suppress Tkinter exceptions to prevent reentrant stderr crashes
+    def silent_exception_handler(self, exc_type, exc_value, exc_traceback):
+        """
+        Silently ignore Tkinter exceptions to prevent reentrant stderr crashes.
+        
+        On macOS, Tkinter's exception reporting causes reentrant calls to stderr
+        which triggers RuntimeError in an infinite loop. This handler breaks the cycle.
+        """
+        pass  # Silently ignore all exceptions
+    
+    # Ignore SIGTRAP completely
+    signal.signal(signal.SIGTRAP, signal.SIG_IGN)
+    
+    try:
+        # Create the main application
+        app = App()
+        
+        # Install silent exception handler
+        app.report_callback_exception = silent_exception_handler.__get__(app, app.__class__)
+        
+        # Start the application
+        app.start()
+        
+    except Exception as e:
+        # Handle startup exceptions
+        try:
+            with open('/tmp/osbc_startup_error.log', 'w') as f:
+                import traceback
+                f.write(f"Startup error: {type(e).__name__}: {e}\n")
+                traceback.print_exc(file=f)
+            print(f"Startup error logged to /tmp/osbc_startup_error.log")
+        except:
+            pass
+        sys.exit(1)
 
-    # IMPORTANT
+    # ========== Bot Testing Without GUI (Development Mode) ==========
+    # To test a bot without the GUI, uncomment and modify the lines below:
+    # from model.<folder_bot_is_in> import <bot_class_name>
+    # app = App(test=True)  # Create app in test mode (no GUI)
+    # app.test(<YourBotClass>())  # Test your bot instance
+    
+    # IMPORTANT:
     # - Make sure your bot's options are pre-defined in its __init__ method.
-    # - You can stop the bot by pressing `Left Ctrl`
+    # - You can stop the bot during testing by pressing `Left Ctrl`

@@ -189,8 +189,29 @@ class Bot(ABC):
                     self.on_stop()
                 except Exception as exc:
                     self.log_msg(f"on_stop failed: {exc}")
+            
+            # Stop the thread
             self.thread.stop()
-            self.thread.join()
+            
+            # Wait for thread to finish while processing UI events
+            # This prevents deadlock when thread has queued UI updates via after_idle()
+            max_wait = 5.0  # Maximum 5 seconds to wait
+            start_time = time.time()
+            
+            while self.thread.is_alive() and (time.time() - start_time) < max_wait:
+                # Process pending UI events to handle after_idle() callbacks
+                if hasattr(self, 'controller') and hasattr(self.controller, 'view'):
+                    try:
+                        self.controller.view.update()
+                    except Exception:
+                        pass  # Ignore update errors during shutdown
+                
+                # Small sleep to avoid busy-waiting
+                time.sleep(0.01)
+            
+            # If thread is still alive after timeout, log warning
+            if self.thread.is_alive():
+                self.log_msg(f"Warning: Bot thread did not stop cleanly within {max_wait}s")
         else:
             self.log_msg("Bot is already stopped.")
 

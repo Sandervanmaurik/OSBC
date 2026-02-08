@@ -9,7 +9,8 @@ styles, this class should be abstracted, then extended for each interface style.
 """
 
 import time
-from typing import List
+from typing import List, Optional
+from contextlib import contextmanager
 
 import pywinctl
 from deprecated import deprecated
@@ -20,6 +21,7 @@ import utilities.imagesearch as imsearch
 import utilities.ocr as ocr
 from utilities.geometry import Point, Rectangle
 from utilities.machine_config import get_machine_config
+from platform_utils.window import create_window, PlatformWindow
 
 
 def get_character_from_title(title: str) -> str:
@@ -147,14 +149,19 @@ class Window:
         self.window_title = window_title
         self.padding_top = padding_top
         self.padding_left = padding_left
+        
+        # Focus caching for performance
+        self._platform_window: Optional[PlatformWindow] = None
+        self._last_focus_check: float = 0
+        self._last_focus_result: bool = False
+        self._focus_validity_window: float = 3.0  # Cache focus state for 3 seconds
+        self._in_focus_sequence: bool = False
 
     def _get_window(self):
-        # Use condition=2 (STARTS_WITH) to match windows like "RuneLite - username"
-        self._client = pywinctl.getWindowsWithTitle(self.window_title, condition=2)
-        if self._client:
-            return self._client[0]
-        else:
-            raise WindowInitializationError("No client window found.")
+        """Get window using platform abstraction (cached)."""
+        if self._platform_window is None:
+            self._platform_window = create_window(self.window_title)
+        return self._platform_window
 
     window = property(
         fget=_get_window,
@@ -168,6 +175,8 @@ class Window:
         if client := self.window:
             try:
                 client.activate()
+                # Invalidate focus cache after focusing
+                self._last_focus_check = 0
             except Exception:
                 raise WindowInitializationError(
                     "Failed to focus client window. Try bringing it to the foreground."
@@ -185,6 +194,70 @@ class Window:
         except Exception:
             pass
         return False
+    
+    def should_check_focus(self) -> bool:
+        """
+        Determine if focus should be checked based on timing and sequence state.
+        
+        This implements smart focus checking to avoid expensive focus checks
+        on every mouse action. Focus is only checked if:
+        - We're not in a focus sequence, OR
+        - Enough time has passed since the last check
+        
+        Returns:
+            True if focus should be checked, False if cached result can be used
+        """
+        if self._in_focus_sequence:
+            # Inside a sequence, only check focus at sequence start
+            return False
+        
+        # Check if cached result is still valid
+        age = time.time() - self._last_focus_check
+        return age >= self._focus_validity_window
+    
+    def check_focus_cached(self) -> bool:
+        """
+        Check focus with caching.
+        
+        Returns cached result if still valid, otherwise performs actual check.
+        
+        Returns:
+            True if window is focused, False otherwise
+        """
+        if self.should_check_focus():
+            # Cache expired or not in sequence, do actual check
+            self._last_focus_result = self.is_focused()
+            self._last_focus_check = time.time()
+        
+        return self._last_focus_result
+    
+    @contextmanager
+    def focus_sequence(self):
+        """
+        Context manager for a sequence of actions that share focus state.
+        
+        Usage:
+            with window.focus_sequence():
+                # Focus checked once here
+                mouse.move_to(x1, y1)
+                mouse.click()
+                mouse.move_to(x2, y2)
+                # No additional focus checks
+        """
+        # Check focus once at sequence start
+        was_focused = self.check_focus_cached()
+        if not was_focused:
+            self.focus()
+        
+        # Enter sequence mode
+        self._in_focus_sequence = True
+        try:
+            yield
+        finally:
+            # Exit sequence mode
+            self._in_focus_sequence = False
+            # Invalidate cache after sequence (state may have changed)
+            self._last_focus_check = 0
 
     def ensure_focus(self, max_retries: int = 3, retry_delay: float = 0.2) -> bool:
         """
@@ -241,14 +314,16 @@ class Window:
         Returns the origin of the client window as a Point.
         """
         if client := self.window:
-            return Point(client.left, client.top)
+            rect = client.get_rect()
+            return Point(rect.left, rect.top)
 
     def rectangle(self) -> Rectangle:
         """
         Returns a Rectangle outlining the entire client window.
         """
         if client := self.window:
-            return Rectangle(client.left, client.top, client.width, client.height)
+            rect = client.get_rect()
+            return Rectangle(rect.left, rect.top, rect.width, rect.height)
 
     def resize(self, width: int, height: int) -> None:
         """

@@ -47,12 +47,24 @@ class Mouse:
     def _ensure_focus(self) -> bool:
         """
         Ensure window is focused before performing mouse action.
+        
+        Uses smart focus checking from Window class to minimize expensive focus checks.
+        
         Returns:
             True if focus is ensured or checking is disabled, False if focus failed.
         """
         if not self._focus_before_action or self._window is None:
             return True
-        return self._window.ensure_focus()
+        
+        # Use smart focus checking with caching
+        if self._window.should_check_focus():
+            # Only check when needed
+            if not self._window.check_focus_cached():
+                # Not focused, try to focus
+                return self._window.ensure_focus()
+        
+        # Already focused or cache is valid
+        return True
 
     def move_to(self, destination: tuple, **kwargs):
         """

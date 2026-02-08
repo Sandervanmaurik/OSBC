@@ -79,6 +79,12 @@ linux = [
     # Linux-specific dependencies if needed in future
 ]
 
+macos = [
+    # macOS-specific dependencies for native window management
+    "pyobjc-framework-Cocoa>=9.0",
+    "pyobjc-framework-Quartz>=9.0",
+]
+
 windows = [
     # Windows-specific dependencies if needed
 ]

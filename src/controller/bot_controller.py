@@ -15,6 +15,22 @@ class BotController(object):
         """
         self.model: Bot = model
         self.view: BotView = view
+    
+    def _schedule_ui_update(self, callback):
+        """
+        Schedule a UI update to run on the main thread.
+        
+        This ensures thread-safe UI updates by using Tkinter's after_idle()
+        to defer the callback to the main event loop.
+        
+        Args:
+            callback: Function to call on the main thread
+        """
+        if self.view and hasattr(self.view, 'after_idle'):
+            self.view.after_idle(callback)
+        else:
+            # Fallback if view doesn't support after_idle
+            callback()
 
     def reload_model(self):
         """
@@ -98,59 +114,81 @@ class BotController(object):
 
     def update_status(self):
         """
-        Called from model. Tells view to update status.
+        Called from model. Tells view to update status (thread-safe).
         """
         status = self.model.status
-        if status == BotStatus.RUNNING:
-            self.view.frame_info.update_status_running()
-        elif status == BotStatus.STOPPED:
-            self.view.frame_info.update_status_stopped()
-        elif status == BotStatus.CONFIGURING:
-            self.view.frame_info.update_status_configuring()
-        elif status == BotStatus.CONFIGURED:
-            self.view.frame_info.update_status_configured()
+        
+        def _update():
+            if status == BotStatus.RUNNING:
+                self.view.frame_info.update_status_running()
+            elif status == BotStatus.STOPPED:
+                self.view.frame_info.update_status_stopped()
+            elif status == BotStatus.CONFIGURING:
+                self.view.frame_info.update_status_configuring()
+            elif status == BotStatus.CONFIGURED:
+                self.view.frame_info.update_status_configured()
+        
+        self._schedule_ui_update(_update)
 
     def update_progress(self):
         """
-        Called from model. Tells view to update progress.
+        Called from model. Tells view to update progress (thread-safe).
         """
-        self.view.frame_info.update_progress(self.model.progress)
+        progress = self.model.progress
+        self._schedule_ui_update(
+            lambda: self.view.frame_info.update_progress(progress)
+        )
 
     def update_state(self, state: str):
         """
-        Called from model. Tells view to update current bot state.
+        Called from model. Tells view to update current bot state (thread-safe).
         """
-        self.view.frame_info.update_state(state)
+        self._schedule_ui_update(
+            lambda: self.view.frame_info.update_state(state)
+        )
 
     def update_skills(self, skill_data):
         """
-        Called from model. Tells view to update skill levels.
+        Called from model. Tells view to update skill levels (thread-safe).
         """
-        self.view.frame_skills.update_skills(skill_data)
+        self._schedule_ui_update(
+            lambda: self.view.frame_skills.update_skills(skill_data)
+        )
 
     def update_behavior_display(self, behavior_config=None, stats=None):
         """
-        Called from model. Tells view to update behavior settings display.
+        Called from model. Tells view to update behavior settings display (thread-safe).
         Args:
             behavior_config: BehaviorManager.config dictionary
             stats: Optional stats dictionary from BehaviorManager.get_stats_summary()
         """
         if behavior_config is None and hasattr(self.model, "behavior"):
             behavior_config = self.model.behavior.config
-        if behavior_config is not None:
-            self.view.update_behavior_display(behavior_config, stats)
+        
+        # Capture values before scheduling to avoid race conditions
+        config_copy = behavior_config
+        stats_copy = stats
+        
+        if config_copy is not None:
+            self._schedule_ui_update(
+                lambda: self.view.update_behavior_display(config_copy, stats_copy)
+            )
 
     def update_log(self, msg: str, overwrite: bool = False):
         """
-        Called from model. Tells view to update log.
+        Called from model. Tells view to update log (thread-safe).
         """
-        self.view.frame_output_log.update_log(msg, overwrite)
+        self._schedule_ui_update(
+            lambda: self.view.frame_output_log.update_log(msg, overwrite)
+        )
 
     def clear_log(self):
         """
-        Called from model. Tells view to clear log.
+        Called from model. Tells view to clear log (thread-safe).
         """
-        self.view.frame_output_log.clear_log()
+        self._schedule_ui_update(
+            lambda: self.view.frame_output_log.clear_log()
+        )
 
     def change_model(self, model: Bot):
         """
