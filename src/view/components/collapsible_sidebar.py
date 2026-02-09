@@ -44,6 +44,9 @@ class CollapsibleSidebar(customtkinter.CTkFrame):
         self.on_chain_builder_callback = on_chain_builder
         self.is_collapsed = False
 
+        # Prevent children from controlling frame size
+        self.grid_propagate(False)
+
         # Store script buttons for toggle updates
         self.script_buttons: Dict[str, Any] = {}  # {script_id: ScriptMenuButton}
 
@@ -172,6 +175,12 @@ class CollapsibleSidebar(customtkinter.CTkFrame):
             self.btn_chain_builder.configure(text="🔗 Chains", width=160)
             self.btn_settings.configure(text="⚙", width=160)
 
+        # Update grid sticky to control horizontal expansion
+        if self.is_collapsed:
+            self.grid_configure(sticky="ns")  # Only stretch vertically
+        else:
+            self.grid_configure(sticky="nswe")  # Fill entire column
+
         # Notify parent
         if self.on_toggle_callback:
             self.on_toggle_callback(self.is_collapsed)
@@ -179,7 +188,7 @@ class CollapsibleSidebar(customtkinter.CTkFrame):
     def _update_sidebar_width(self):
         """Update the sidebar's min/max width based on collapsed state."""
         if self.is_collapsed:
-            self.configure(width=50)
+            self.configure(width=80) 
         else:
             self.configure(width=180)
 

@@ -86,7 +86,7 @@ class App(customtkinter.CTk):
         # Column 1: Middle panel (expandable, script view or welcome)
         # Column 2: Stats panel (fixed width ~280px)
 
-        self.grid_columnconfigure(0, weight=0, minsize=50)  # Sidebar
+        self.grid_columnconfigure(0, weight=0, minsize=180)  # Sidebar (starts expanded)
         self.grid_columnconfigure(1, weight=1)  # Middle panel (expandable)
         self.grid_columnconfigure(2, weight=0, minsize=280)  # Stats panel
         self.grid_rowconfigure(0, weight=1)
@@ -101,7 +101,7 @@ class App(customtkinter.CTk):
             on_settings=self._on_settings_clicked,
             on_chain_builder=self._on_chain_builder_clicked,
         )
-        self.sidebar.grid(row=0, column=0, sticky="nswe")
+        self.sidebar.grid(row=0, column=0, sticky="nswe", padx=0, pady=0)
 
         # Create middle panel container
         self.middle_container = customtkinter.CTkFrame(
@@ -236,7 +236,8 @@ class App(customtkinter.CTk):
         Updates sidebar width constraint.
         """
         if is_collapsed:
-            self.grid_columnconfigure(0, minsize=50, weight=0)
+            # Remove minsize constraint, let frame width control it
+            self.grid_columnconfigure(0, minsize=0, weight=0)
         else:
             self.grid_columnconfigure(0, minsize=180, weight=0)
 
