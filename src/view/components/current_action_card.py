@@ -1,5 +1,5 @@
 """
-CurrentActionCard - Compact card displaying the current bot action.
+CurrentActionCard - Compact card displaying the current bot action and XP/hour rate.
 Subscribes to BotSessionState for real-time updates.
 """
 
@@ -25,6 +25,7 @@ class CurrentActionCard(customtkinter.CTkFrame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=0)
+        self.rowconfigure(2, weight=0)
 
         # Title label
         self.lbl_title = customtkinter.CTkLabel(
@@ -44,28 +45,43 @@ class CurrentActionCard(customtkinter.CTkFrame):
             text_color="#DCE4EE",
             anchor="w",
         )
-        self.lbl_action.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 10))
+        self.lbl_action.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 5))
+
+        # XP/Hour label
+        self.lbl_xp_hour = customtkinter.CTkLabel(
+            self,
+            text="XP/Hour: 0",
+            font=("Roboto", 12),
+            text_color="#90A0B0",
+            anchor="w",
+        )
+        self.lbl_xp_hour.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 10))
 
         # Subscribe to bot state changes
         BotSessionState().add_observer(self._on_bot_state_changed)
 
         # Initialize with current state
-        self._update_action()
+        self._update_display()
 
     def _on_bot_state_changed(self, property_name=None, value=None):
         """
         Observer callback for BotSessionState changes.
-        Updates action display when current_action changes.
+        Updates action and XP/hour display.
         """
-        if property_name is None or property_name == "current_action":
-            # Schedule UI update on main thread (thread-safe for Tkinter)
-            self.after_idle(self._update_action)
+        # Schedule UI update on main thread (thread-safe for Tkinter)
+        self.after_idle(self._update_display)
 
-    def _update_action(self):
+    def _update_display(self):
         """
-        Update the action text from BotSessionState.
+        Update the action text and XP/hour from BotSessionState.
         Must be called from main thread.
         """
         state = BotSessionState()
+
+        # Update action text
         action_text = state.current_action if state.current_action else "Idle"
         self.lbl_action.configure(text=action_text)
+
+        # Update XP/hour
+        xp_per_hour = state.get_xp_per_hour()
+        self.lbl_xp_hour.configure(text=f"XP/Hour: {xp_per_hour:,}")

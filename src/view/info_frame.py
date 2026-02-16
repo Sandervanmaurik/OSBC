@@ -62,10 +62,13 @@ class InfoFrame(customtkinter.CTkFrame):
         # -- session stats (row 2-3)
         self.stats_frame = customtkinter.CTkFrame(master=self, fg_color=self._fg_color)
         self.stats_frame.grid(
-            row=2, column=0, rowspan=2, sticky="ew", padx=15, pady=(10, 5)
+            row=2, column=0, rowspan=2, sticky="nsew", padx=15, pady=(10, 5)
         )
         self.stats_frame.columnconfigure(0, weight=0)
         self.stats_frame.columnconfigure(1, weight=1)
+        self.stats_frame.rowconfigure(
+            (0, 1, 2), weight=0
+        )  # Allow all 3 rows to display
 
         # Action row
         self.lbl_action_name = customtkinter.CTkLabel(
@@ -96,6 +99,21 @@ class InfoFrame(customtkinter.CTkFrame):
             master=self.stats_frame, text="0", font=small_font(), anchor="w"
         )
         self.lbl_xp_value.grid(row=1, column=1, pady=2, sticky="w")
+
+        # XP/Hour row
+        self.lbl_xp_hour_name = customtkinter.CTkLabel(
+            master=self.stats_frame,
+            text="XP/Hour:",
+            font=small_font(),
+            width=80,
+            anchor="w",
+        )
+        self.lbl_xp_hour_name.grid(row=2, column=0, padx=(0, 10), pady=2, sticky="w")
+
+        self.lbl_xp_hour_value = customtkinter.CTkLabel(
+            master=self.stats_frame, text="0", font=small_font(), anchor="w"
+        )
+        self.lbl_xp_hour_value.grid(row=2, column=1, pady=2, sticky="w")
 
         # Subscribe to state changes
         BotSessionState().add_observer(self._on_session_state_changed)
@@ -398,3 +416,7 @@ class InfoFrame(customtkinter.CTkFrame):
         # Update XP gained
         xp_gained = state.get_total_xp_gained()
         self.lbl_xp_value.configure(text=f"{xp_gained:,}")
+
+        # Update XP/hour
+        xp_per_hour = state.get_xp_per_hour()
+        self.lbl_xp_hour_value.configure(text=f"{xp_per_hour:,}")

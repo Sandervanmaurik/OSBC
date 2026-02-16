@@ -44,6 +44,7 @@ class BankingMixin:
     if TYPE_CHECKING:
         from utilities.behavior import BehaviorManager
         from model.runelite_bot import RuneLiteWindow
+        from utilities.geometry import Point
 
         behavior: "BehaviorManager"
         win: "RuneLiteWindow"
@@ -59,6 +60,15 @@ class BankingMixin:
         def find_item_in_bank(
             self: "BotProtocol", template_path: str, confidence: float = 0.3
         ): ...
+        def get_nearest_tag(
+            self: "BotProtocol", color, search_rect=None
+        ) -> Optional[RuneLiteObject]: ...
+        def mouseover_text(
+            self: "BotProtocol", contains: Union[str, List[str]], **kwargs
+        ) -> bool: ...
+        def _safe_key_down(self: "BotProtocol", key: str) -> bool: ...
+        def _safe_key_up(self: "BotProtocol", key: str) -> bool: ...
+        def _ensure_focus(self: "BotProtocol") -> bool: ...
 
     def open_bank(
         self, tag_color: Union[str, object, None] = None, max_attempts: int = 3
@@ -279,7 +289,10 @@ class BankingMixin:
             template_path = self.get_template_path(template_name, category="items")
 
             # Find item in bank
-            result = self.find_item_in_bank(template_path, confidence=0.05)
+            result = self.find_item_in_bank(template_path, confidence=0.2)
+            print(
+                f"Finding {template_name} in bank with template {template_path} - result: {result}"
+            )
 
             if not result:
                 self.log_msg(f"{template_name} not found in bank! Stopping...")
@@ -322,28 +335,64 @@ class BankingMixin:
             return False
 
     def _find_bank_with_rotation(
-        self, tag_color, attempts: int = 3
+        self, tag_color, attempts: int = 8
     ) -> Optional[RuneLiteObject]:
         """
-        Find bank with camera rotation fallback.
+        Find bank with progressive camera rotation and recovery actions.
+
+        Uses a multi-stage search strategy similar to mining bot:
+        1. Initial rotation attempts (light search)
+        2. Zoom adjustments (change perspective)
+        3. Larger camera movements (thorough search)
+        4. Mini adjustments (fine-tune view)
 
         Args:
             tag_color: Color to search for
-            attempts: Number of rotation attempts
+            attempts: Maximum number of search attempts (default: 8)
 
         Returns:
             RuneLiteObject if found, None otherwise
         """
         for attempt in range(attempts):
+            # Check for bank in current view
             bank = self.get_nearest_tag(tag_color)
             if bank is not None:
                 return bank
-            if attempt < attempts - 1:
-                self.log_msg(
-                    f"Bank not found, rotating camera (attempt {attempt + 1}/{attempts})"
-                )
+
+            # Don't try recovery actions on the last attempt
+            if attempt >= attempts - 1:
+                break
+
+            # Log search attempt
+            self.log_msg(
+                f"Bank not found, trying recovery action (attempt {attempt + 1}/{attempts})"
+            )
+
+            # Progressive recovery actions (similar to mining bot's _run_recovery)
+            stage = attempt % 6  # Cycle through 6 different recovery actions
+
+            if stage == 0:
+                # Light camera rotation
                 self._rotate_camera_search()
-                self.behavior.timing.sleep((0.5, 1.2))
+            elif stage == 1:
+                # Zoom out for wider view
+                self._zoom_out_banking()
+            elif stage == 2:
+                # Larger rotation
+                self._rotate_camera_search_large()
+            elif stage == 3:
+                # Zoom in for closer view
+                self._zoom_in_banking()
+            elif stage == 4:
+                # Mini camera adjustment (vertical + small horizontal)
+                self._mini_camera_adjust_banking()
+            elif stage == 5:
+                # Full rotation to opposite direction
+                self._rotate_camera_search_opposite()
+
+            # Wait for camera to settle and UI to update
+            self.behavior.timing.sleep((0.6, 1.4))
+
         return None
 
     def _wait_for_bank_open(self, timeout_seconds: float = 8.0) -> bool:
@@ -381,6 +430,145 @@ class BankingMixin:
             self.behavior.timing.sleep((duration, duration))
         finally:
             self._safe_key_up(key)
+
+    def _rotate_camera_search_large(self) -> None:
+        """
+        Rotate camera more significantly to search for bank.
+
+        Similar to mining bot's _rotate_camera_search - larger movements.
+        """
+        try:
+            # Random direction, larger rotation
+            key = "left" if random.random() < 0.5 else "right"
+
+            if not self._safe_key_down(key):
+                return
+
+            try:
+                # Longer duration for bigger rotation
+                duration = rd.truncated_normal_sample(0.8, 1.6, mean=1.2, std=0.25)
+                self.behavior.timing.sleep((duration, duration))
+            finally:
+                self._safe_key_up(key)
+
+            self.behavior.timing.sleep((0.2, 0.5))
+        except Exception as exc:
+            self.log_msg(f"Large camera rotation error: {exc}")
+
+    def _rotate_camera_search_opposite(self) -> None:
+        """
+        Rotate camera in the opposite direction for full 360° coverage.
+
+        Useful when bank might be just out of view behind the player.
+        """
+        try:
+            # Pick a direction and rotate significantly
+            key = random.choice(["left", "right"])
+
+            if not self._safe_key_down(key):
+                return
+
+            try:
+                # Very long duration for near-180° turn
+                duration = rd.truncated_normal_sample(1.5, 2.5, mean=2.0, std=0.3)
+                self.behavior.timing.sleep((duration, duration))
+            finally:
+                self._safe_key_up(key)
+
+            self.behavior.timing.sleep((0.3, 0.7))
+        except Exception as exc:
+            self.log_msg(f"Opposite camera rotation error: {exc}")
+
+    def _mini_camera_adjust_banking(self) -> None:
+        """
+        Make small camera adjustments (vertical tilt + small horizontal).
+
+        Sometimes bank is visible but at an awkward angle.
+        """
+        try:
+            # Small vertical adjustment (up/down arrow keys)
+            if random.random() < 0.7:
+                v_key = "up" if random.random() < 0.5 else "down"
+                if self._safe_key_down(v_key):
+                    try:
+                        duration = rd.truncated_normal_sample(
+                            0.15, 0.4, mean=0.25, std=0.08
+                        )
+                        self.behavior.timing.sleep((duration, duration))
+                    finally:
+                        self._safe_key_up(v_key)
+                    self.behavior.timing.sleep((0.1, 0.2))
+
+            # Small horizontal adjustment
+            if random.random() < 0.6:
+                h_key = "left" if random.random() < 0.5 else "right"
+                if self._safe_key_down(h_key):
+                    try:
+                        duration = rd.truncated_normal_sample(
+                            0.2, 0.5, mean=0.35, std=0.1
+                        )
+                        self.behavior.timing.sleep((duration, duration))
+                    finally:
+                        self._safe_key_up(h_key)
+
+        except Exception as exc:
+            self.log_msg(f"Mini camera adjust error: {exc}")
+
+    def _zoom_out_banking(self) -> None:
+        """
+        Zoom out for better view when searching for bank.
+
+        Wider FOV can help spot tagged banks that are slightly off-screen.
+        """
+        self.log_msg("Zooming out to search for bank...")
+        try:
+            import pyautogui as pag
+
+            if not self._ensure_focus():
+                self.log_msg("Cannot zoom out, game not focused.")
+                return
+
+            center = self.win.game_view.get_center()
+            self.behavior.mouse.move_to(center, mouseSpeed="fast")
+            self.behavior.timing.sleep((0.1, 0.25))
+
+            # Scroll out 3-5 times
+            scroll_clicks = random.randint(3, 5)
+            for _ in range(scroll_clicks):
+                pag.scroll(-240)
+                self.behavior.timing.sleep((0.05, 0.12))
+
+            self.behavior.timing.sleep((0.2, 0.4))
+        except Exception as exc:
+            self.log_msg(f"Zoom out error: {exc}")
+
+    def _zoom_in_banking(self) -> None:
+        """
+        Zoom in for closer view when searching for bank.
+
+        Sometimes tags are small and easier to see when zoomed in.
+        """
+        self.log_msg("Zooming in to search for bank...")
+        try:
+            import pyautogui as pag
+
+            if not self._ensure_focus():
+                self.log_msg("Cannot zoom in, game not focused.")
+                return
+
+            center = self.win.game_view.get_center()
+            self.behavior.mouse.move_to(center, mouseSpeed="fast")
+            self.behavior.timing.sleep((0.1, 0.25))
+
+            # Scroll in 2-4 times
+            scroll_clicks = random.randint(2, 4)
+            for _ in range(scroll_clicks):
+                pag.scroll(240)
+                self.behavior.timing.sleep((0.05, 0.12))
+
+            self.behavior.timing.sleep((0.2, 0.4))
+        except Exception as exc:
+            self.log_msg(f"Zoom in error: {exc}")
 
     def _string_to_color(self, color_name: str):
         """

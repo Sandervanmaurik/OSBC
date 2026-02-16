@@ -186,38 +186,105 @@ class BotBehaviorConfig:
     a bot instance. Bots can pass this to OSRSBot.__init__.
 
     Attributes:
-        profile: Behavior profile name ("cautious", "active", "high-active", etc.)
+        profile: Legacy behavior profile name (DEPRECATED - use activity_profile)
+        activity_profile: Activity profile enum (RECOMMENDED)
+        cycle_enabled: Enable automatic profile switching after inventories
         mouse_profile: Optional mouse activity profile (fidgeting frequency)
         camera_profile: Optional camera movement profile
         custom_config: Optional dict to override specific profile settings
 
-    Example:
-        # Bank-standing bot with minimal camera movement
-        from utilities.behavior.config import BotBehaviorConfig
-        from utilities.behavior.profiles import MouseProfile, CameraProfile
+    Example (LEGACY - still works):
+        config = BotBehaviorConfig(
+            profile="active",
+            mouse_profile=MouseProfile.BANK_STANDING,
+        )
+
+    Example (RECOMMENDED):
+        from utilities.behavior.profiles import ActivityProfile
 
         config = BotBehaviorConfig(
-            profile="high-active",
-            mouse_profile=MouseProfile.BANK_STANDING,
-            camera_profile=CameraProfile.BANK_STANDING,
-            custom_config={
-                "timing": {"speed_multiplier": 0.9},
-                "action": {"misclick_chance": 0.05},
-            }
+            activity_profile=ActivityProfile.BANK_STANDING_ACTIVE,
+            cycle_enabled=True,
         )
 
-        # Pass to OSRSBot
-        super().__init__(
-            bot_title="Cooking",
-            description="...",
-            behavior_config=config,
-        )
+    Example (Factory methods):
+        # Bank-standing bot
+        config = BotBehaviorConfig.bank_standing(active=True)
+
+        # Skilling bot
+        config = BotBehaviorConfig.skilling(active=False)
     """
 
-    profile: str = "active"
+    profile: str = "active"  # DEPRECATED: Use activity_profile instead
+    activity_profile: Optional["ActivityProfile"] = None  # RECOMMENDED
+    cycle_enabled: bool = True  # Enable automatic profile switching
     mouse_profile: Optional["MouseProfile"] = None
     camera_profile: Optional["CameraProfile"] = None
     custom_config: Optional[Dict[str, Any]] = None
+
+    @classmethod
+    def bank_standing(
+        cls, active: bool = True, cycle: bool = True
+    ) -> "BotBehaviorConfig":
+        """
+        Factory method for bank-standing bots (cooking, fletching, etc.).
+
+        Args:
+            active: True for Active profile, False for AFK profile
+            cycle: Enable automatic profile switching
+
+        Returns:
+            BotBehaviorConfig configured for bank standing
+
+        Example:
+            # Active bank-standing bot
+            config = BotBehaviorConfig.bank_standing(active=True)
+
+            # AFK bank-standing bot
+            config = BotBehaviorConfig.bank_standing(active=False)
+        """
+        from utilities.behavior.profiles import ActivityProfile
+
+        profile = (
+            ActivityProfile.BANK_STANDING_ACTIVE
+            if active
+            else ActivityProfile.BANK_STANDING_AFK
+        )
+
+        return cls(
+            activity_profile=profile,
+            cycle_enabled=cycle,
+        )
+
+    @classmethod
+    def skilling(cls, active: bool = True, cycle: bool = True) -> "BotBehaviorConfig":
+        """
+        Factory method for skilling/combat bots (woodcutting, fishing, combat, etc.).
+
+        Args:
+            active: True for Active profile, False for AFK profile
+            cycle: Enable automatic profile switching
+
+        Returns:
+            BotBehaviorConfig configured for skilling/combat
+
+        Example:
+            # Active skilling bot
+            config = BotBehaviorConfig.skilling(active=True)
+
+            # AFK skilling bot
+            config = BotBehaviorConfig.skilling(active=False)
+        """
+        from utilities.behavior.profiles import ActivityProfile
+
+        profile = (
+            ActivityProfile.SKILLING_ACTIVE if active else ActivityProfile.SKILLING_AFK
+        )
+
+        return cls(
+            activity_profile=profile,
+            cycle_enabled=cycle,
+        )
 
     def to_kwargs(self) -> Dict[str, Any]:
         """
@@ -227,10 +294,18 @@ class BotBehaviorConfig:
             Dictionary with keys matching BehaviorManager.__init__ parameters
 
         Example:
-            config = BotBehaviorConfig(profile="high-active")
+            config = BotBehaviorConfig(activity_profile=ActivityProfile.SKILLING_ACTIVE)
             manager = BehaviorManager(bot, **config.to_kwargs())
         """
-        kwargs: Dict[str, Any] = {"profile": self.profile}
+        kwargs: Dict[str, Any] = {}
+
+        # Prioritize activity_profile over legacy profile
+        if self.activity_profile is not None:
+            kwargs["activity_profile"] = self.activity_profile
+        else:
+            kwargs["profile"] = self.profile
+
+        kwargs["cycle_enabled"] = self.cycle_enabled
 
         if self.mouse_profile is not None:
             kwargs["mouse_profile"] = self.mouse_profile

@@ -301,19 +301,14 @@ class ChainBuilderPanel(customtkinter.CTkFrame):
         # Create options window
         options_window = customtkinter.CTkToplevel(self)
         options_window.title(f"Configure {bot.bot_title}")
-        options_window.geometry("600x600")
         options_window.transient(self)
         options_window.grab_set()
 
-        # Main container
-        main_frame = customtkinter.CTkFrame(options_window, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
         # ============ Duration Configuration ============
         duration_frame = customtkinter.CTkFrame(
-            main_frame, fg_color="#1A1A1A", corner_radius=8
+            options_window, fg_color="#1A1A1A", corner_radius=8
         )
-        duration_frame.pack(fill="x", pady=(0, 10))
+        duration_frame.pack(fill="x", padx=20, pady=(15, 10))
 
         duration_label = customtkinter.CTkLabel(
             duration_frame,
@@ -351,20 +346,31 @@ class ChainBuilderPanel(customtkinter.CTkFrame):
 
         # ============ Bot Options ============
         # Build options UI using bot's create_options method
-        options_builder = bot.create_options()
-        if options_builder:
+        bot.create_options()  # Populate bot.options_builder
+        options_ui = None  # Store reference for save_and_close()
+
+        if bot.options_builder.options:
             # Temporarily override controller to capture options
             temp_controller = _OptionsCapture(entry)
-            options_ui = options_builder.build_ui(main_frame, temp_controller)
-            options_ui.pack(fill="both", expand=True, pady=(0, 10))
+            # Pass options_window as parent (OptionsUI expects a window for geometry() call)
+            # OptionsUI will resize the window and pack itself
+            options_ui = bot.options_builder.build_ui(options_window, temp_controller)
+            options_ui.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+
+            # Hide the internal Save button (we'll use the dialog's unified Save button)
+            if hasattr(options_ui, "btn_save"):
+                options_ui.btn_save.grid_forget()
 
             # Pre-fill existing options if any
             if entry.options:
                 _prefill_options(options_ui, entry.options)
 
+            # Clean up builder (matches pattern in bot.get_options_view())
+            bot.options_builder.options = {}
+
         # ============ Save/Cancel Buttons ============
-        button_frame = customtkinter.CTkFrame(main_frame, fg_color="transparent")
-        button_frame.pack(fill="x", pady=(10, 0))
+        button_frame = customtkinter.CTkFrame(options_window, fg_color="transparent")
+        button_frame.pack(fill="x", padx=20, pady=(10, 15))
 
         def save_and_close():
             # Validate duration input
@@ -378,9 +384,13 @@ class ChainBuilderPanel(customtkinter.CTkFrame):
 
                 # Update duration
                 entry.running_time = duration
+
+                # Extract bot options from widgets (if options UI was built)
+                if options_ui and options_ui.widgets:
+                    entry.options = options_ui.extract_options()
+
                 # Mark as configured
                 entry.configured = True
-                # Options are already saved via _OptionsCapture
                 # Refresh the card display
                 self._refresh_entries()
                 self._update_total_time()

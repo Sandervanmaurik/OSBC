@@ -4,6 +4,7 @@ Provides observer pattern for UI updates.
 """
 
 from typing import Callable, Dict, List, Optional
+from datetime import datetime
 
 
 class BotSessionState:
@@ -42,6 +43,7 @@ class BotSessionState:
     current_action: Optional[str]
     _starting_xp: Dict[str, int]
     _session_starting_xp: Dict[str, int]
+    _start_time: Optional[datetime]
     _observers: List[Callable[[], None]]
 
     def __new__(cls):
@@ -52,6 +54,7 @@ class BotSessionState:
             cls._instance.current_action = None
             cls._instance._starting_xp = {}
             cls._instance._session_starting_xp = {}  # Session-level, persists across script runs
+            cls._instance._start_time = None
             cls._instance._observers = []
         return cls._instance
 
@@ -180,7 +183,27 @@ class BotSessionState:
         """Reset state for new session."""
         self.current_action = None
         self._starting_xp.clear()
+        self._start_time = datetime.now()
         self.notify_observers()
+
+    def get_xp_per_hour(self) -> int:
+        """
+        Calculate XP per hour based on total XP gained and elapsed time.
+
+        Returns:
+            XP per hour (0 if no time has elapsed or no start time)
+        """
+        if self._start_time is None:
+            return 0
+
+        elapsed = (datetime.now() - self._start_time).total_seconds()
+        if elapsed <= 0:
+            return 0
+
+        total_xp = self.get_total_xp_gained()
+        # Convert to XP per hour
+        xp_per_hour = int((total_xp / elapsed) * 3600)
+        return xp_per_hour
 
     @classmethod
     def reset_instance(cls) -> None:

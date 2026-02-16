@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, List, Optional
+from typing import Dict, Tuple, List
 import time
 from model.bot import BotStatus
 from model.osrs.osrs_bot import OSRSBot
@@ -6,7 +6,6 @@ import utilities.color as clr
 
 # === Import behavior system ===
 from utilities.behavior.config import BotBehaviorConfig
-from utilities.behavior.profiles import MouseProfile, CameraProfile
 
 
 class OSRSCooking(OSRSBot):
@@ -89,30 +88,10 @@ class OSRSCooking(OSRSBot):
         )
 
         # === Configure behavior system ===
-        # Bank-standing profiles: minimal camera, frequent mouse fidgeting
-        behavior_config = BotBehaviorConfig(
-            profile="high-active",  # Fast, efficient profile
-            mouse_profile=MouseProfile.BANK_STANDING,
-            camera_profile=CameraProfile.BANK_STANDING,
-            custom_config={
-                "timing": {
-                    "speed_multiplier": 0.9,  # Slightly faster
-                },
-                "mouse": {
-                    "default_speed": "fast",
-                },
-                "action": {
-                    "misclick_chance": 0.05,  # Low for repetitive task
-                    "hesitation_chance": 0.08,
-                },
-                "attention": {
-                    "skill_check_enabled": False,
-                    "inventory_check_enabled": False,
-                },
-                "breaks": {
-                    "enabled": True,  # Optional for bank-standing
-                },
-            },
+        # Bank-standing bot: use factory method for simplicity
+        behavior_config = BotBehaviorConfig.bank_standing(
+            active=True,  # Active profile (fast, efficient)
+            cycle=True,  # Enable automatic profile switching
         )
 
         super().__init__(
@@ -339,7 +318,14 @@ class OSRSCooking(OSRSBot):
                 return False
 
         # Wait for cooking to end (uses ActionWaitingMixin)
-        return self.wait_for_action_end("Cooking", 60.0)
+        cooking_success = self.wait_for_action_end("Cooking", 60.0)
+
+        # Notify behavior manager that we completed an inventory
+        # This may trigger automatic profile switching
+        if cooking_success:
+            self.behavior.on_inventory_complete()
+
+        return cooking_success
 
     def _handle_banking(self, raw_template: str, cooked_template: str) -> bool:
         """
@@ -384,8 +370,8 @@ class OSRSCooking(OSRSBot):
         catalyst_template = self.RATION_TEMPLATES["catalyst"]
         output_template = self.RATION_TEMPLATES["output"]
 
-        input_path = self.get_template_path("cooked_chicken.png", category="items")
-        catalyst_path = self.get_template_path("maple_leaves.png", category="items")
+        input_path = self.get_template_path(input_template, category="items")
+        catalyst_path = self.get_template_path(catalyst_template, category="items")
 
         # Find items in inventory
         # Catalyst (maple leaves) should always be in slot 0
@@ -442,7 +428,14 @@ class OSRSCooking(OSRSBot):
                 return False
 
         # Wait for making to end (uses ActionWaitingMixin)
-        return self.wait_for_action_end("Making", self._making_end_timeout)
+        making_success = self.wait_for_action_end("Making", self._making_end_timeout)
+
+        # Notify behavior manager that we completed an inventory
+        # This may trigger automatic profile switching
+        if making_success:
+            self.behavior.on_inventory_complete()
+
+        return making_success
 
     def _handle_rations_banking(
         self,

@@ -4,10 +4,12 @@ import time
 import random
 import threading
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, Any, Optional
+from typing import TYPE_CHECKING, Dict, Any, Optional, Union
 
 from utilities.behavior.profiles import BehaviorProfiles
 from utilities.behavior.profiles import (
+    ActivityProfile,
+    ACTIVITY_PROFILE_CONFIGS,
     MouseProfile,
     CameraProfile,
     MOUSE_PROFILES,
@@ -69,7 +71,9 @@ class BehaviorManager:
     def __init__(
         self,
         bot: "Bot",
-        profile: str = "experienced",
+        profile: str = "active",  # DEPRECATED: Use activity_profile
+        activity_profile: Optional[ActivityProfile] = None,  # RECOMMENDED
+        cycle_enabled: bool = True,
         mouse_profile: Optional[MouseProfile] = None,
         camera_profile: Optional[CameraProfile] = None,
         custom_config: Optional[Dict[str, Any]] = None,
@@ -79,36 +83,49 @@ class BehaviorManager:
 
         Args:
             bot: The bot instance that will use these behaviors
-            profile: Profile name ("cautious", "experienced", "focused")
+            profile: DEPRECATED - Legacy profile name ("active", "high-active", etc.)
+            activity_profile: RECOMMENDED - Activity profile enum (ActivityProfile.SKILLING_ACTIVE, etc.)
+            cycle_enabled: Enable automatic profile switching after inventories
             mouse_profile: Optional mouse activity profile
             camera_profile: Optional camera movement profile
             custom_config: Optional dict to override profile settings
                           Format: {"timing": {...}, "mouse": {...}, etc.}
 
-        Example:
-            # Use default profile
-            manager = BehaviorManager(bot, profile="experienced")
+        Example (DEPRECATED - still works):
+            manager = BehaviorManager(bot, profile="active")
 
-            # Customize specific settings
+        Example (RECOMMENDED):
+            from utilities.behavior.profiles import ActivityProfile
+            manager = BehaviorManager(bot, activity_profile=ActivityProfile.SKILLING_ACTIVE)
+
+        Example (With cycle):
             manager = BehaviorManager(
                 bot,
-                profile="cautious",
-                custom_config={
-                    "timing": {"speed_multiplier": 1.5},
-                    "attention": {"camera_enabled": False}
-                }
-            )
-
-            # Use activity profiles
-            manager = BehaviorManager(
-                bot,
-                profile="high-active",
-                mouse_profile=MouseProfile.BANK_STANDING,
-                camera_profile=CameraProfile.BANK_STANDING,
+                activity_profile=ActivityProfile.BANK_STANDING_ACTIVE,
+                cycle_enabled=True
             )
         """
         self.bot = bot
-        self.profile_name = profile
+
+        # Determine which profile system to use
+        if activity_profile is not None:
+            # New activity profile system
+            self._activity_profile = activity_profile
+            self.profile_name = activity_profile.value
+            profile_config = ACTIVITY_PROFILE_CONFIGS[activity_profile].copy()
+
+            # Store for later logging (controller not ready during __init__)
+            self._pending_init_log = True
+        else:
+            # Legacy profile system
+            self._activity_profile = None
+            self.profile_name = profile
+            profile_config = BehaviorProfiles.get(profile)
+            self._pending_init_log = False
+
+        # Cycle management
+        self.cycle_enabled = cycle_enabled
+        self._inventory_count = 0
 
         # Store mouse and camera profiles
         self.mouse_profile = mouse_profile or MouseProfile.ACTIVE
@@ -121,9 +138,6 @@ class BehaviorManager:
         self._fidget_stop_event = None
         self._fidget_paused = False  # Pause during actions
         self._fidget_started = False
-
-        # Load profile configuration
-        profile_config = BehaviorProfiles.get(profile)
 
         # Merge with custom config if provided
         if custom_config:
@@ -403,6 +417,274 @@ class BehaviorManager:
             CameraProfileConfig instance
         """
         return self.camera_config
+
+    def _log_init_if_pending(self) -> None:
+        """
+        Log initialization info if it hasn't been logged yet.
+
+        This is called on first inventory complete or can be called manually.
+        We defer init logging because controller isn't ready during __init__.
+        """
+        if not self._pending_init_log or self.bot is None:
+            return
+
+        if not hasattr(self.bot, "controller") or self.bot.controller is None:
+            return
+
+        self._pending_init_log = False
+
+        if self._activity_profile is not None:
+            profile_info = ACTIVITY_PROFILE_CONFIGS[self._activity_profile]
+            self.bot.log_msg("=" * 60)
+            self.bot.log_msg("[BEHAVIOR] PROFILE INITIALIZED")
+            self.bot.log_msg("=" * 60)
+            self.bot.log_msg(f"Profile: {profile_info['name']}")
+            self.bot.log_msg(f"Description: {profile_info['description']}")
+            self.bot.log_msg(f"Speed: {profile_info['timing']['speed_multiplier']}x")
+            self.bot.log_msg(
+                f"Cycling: {'ENABLED' if self.cycle_enabled else 'DISABLED'}"
+            )
+            if self.cycle_enabled:
+                switch_chance = profile_info.get("cycle_switch_chance", 0.05)
+                self.bot.log_msg(
+                    f"Switch chance: {switch_chance * 100:.1f}% per inventory"
+                )
+            self.bot.log_msg(
+                f"Tab-out: {'ENABLED' if profile_info['attention']['tab_out_enabled'] else 'DISABLED'}"
+            )
+            self.bot.log_msg(
+                f"Bank check: {'ENABLED' if profile_info['attention']['bank_check_enabled'] else 'DISABLED'}"
+            )
+            self.bot.log_msg("=" * 60)
+
+    def on_inventory_complete(self) -> None:
+        """
+        Called by bot when inventory cycle completes.
+
+        This triggers cycle management logic:
+        1. Increments inventory counter
+        2. Probabilistically decides if profile should switch
+        3. If switching, selects next profile using weighted random
+        4. Reconfigures all modules with new profile
+
+        Example:
+            # In bot's main loop
+            if inventory_full and banked:
+                self.behavior.on_inventory_complete()  # May switch profile
+        """
+        # Log initialization on first call (controller is ready now)
+        self._log_init_if_pending()
+
+        if not self.cycle_enabled or self._activity_profile is None:
+            return
+
+        self._inventory_count += 1
+
+        # Log inventory completion
+        if self.bot is not None:
+            self.bot.log_msg(f"[Cycle] Inventory #{self._inventory_count} complete")
+
+        # Check if we should switch profiles
+        if self._should_switch_profile():
+            new_profile = self._select_next_profile()
+            if new_profile != self._activity_profile:
+                if self.bot is not None:
+                    self.bot.log_msg(
+                        f"[Cycle] Profile switch triggered (random chance)"
+                    )
+                self.switch_to_profile(new_profile)
+            else:
+                if self.bot is not None:
+                    self.bot.log_msg(
+                        f"[Cycle] Switch rolled but stayed on same profile"
+                    )
+        else:
+            if self.bot is not None:
+                profile_info = ACTIVITY_PROFILE_CONFIGS[self._activity_profile]
+                switch_chance = profile_info.get("cycle_switch_chance", 0.05)
+                self.bot.log_msg(
+                    f"[Cycle] No switch this inventory ({switch_chance * 100:.1f}% chance)"
+                )
+
+    def _should_switch_profile(self) -> bool:
+        """
+        Determine if profile should switch based on cycle chance.
+
+        Returns:
+            True if profile should switch
+        """
+        if self._activity_profile is None:
+            return False
+
+        # Get switch probability from current profile config
+        switch_chance = self.config.get("cycle_switch_chance", 0.05)
+
+        # Probabilistic switch
+        import utilities.random_util as rd
+
+        return rd.random_chance(switch_chance)
+
+    def _select_next_profile(self) -> ActivityProfile:
+        """
+        Select next profile using weighted random selection.
+
+        Uses the cycle_weights from current profile config to determine
+        which profile to switch to.
+
+        Returns:
+            Next ActivityProfile to switch to
+        """
+        if self._activity_profile is None:
+            return ActivityProfile.SKILLING_ACTIVE
+
+        # Get weights from current profile
+        weights_dict = self.config.get("cycle_weights", {})
+
+        if not weights_dict:
+            # No weights defined, stay on current profile
+            return self._activity_profile
+
+        # Convert to lists for random.choices
+        profiles = []
+        weights = []
+
+        for profile_name, weight in weights_dict.items():
+            try:
+                # Convert string name to ActivityProfile enum
+                profile = ActivityProfile(profile_name)
+                profiles.append(profile)
+                weights.append(weight)
+            except ValueError:
+                # Invalid profile name, skip
+                continue
+
+        if not profiles:
+            return self._activity_profile
+
+        # Weighted random selection
+        selected = random.choices(profiles, weights=weights, k=1)[0]
+        return selected
+
+    def switch_to_profile(self, new_profile: ActivityProfile) -> None:
+        """
+        Switch to a new activity profile.
+
+        Reconfigures all behavior modules with the new profile settings.
+
+        Args:
+            new_profile: ActivityProfile to switch to
+
+        Example:
+            from utilities.behavior.profiles import ActivityProfile
+            self.behavior.switch_to_profile(ActivityProfile.BANK_STANDING_AFK)
+        """
+        if new_profile == self._activity_profile:
+            return  # Already on this profile
+
+        old_profile_name = (
+            self._activity_profile.value if self._activity_profile else "unknown"
+        )
+        self._activity_profile = new_profile
+        self.profile_name = new_profile.value
+
+        # Load new profile config
+        profile_config = ACTIVITY_PROFILE_CONFIGS[new_profile].copy()
+        self.config = profile_config
+
+        # Reconfigure all modules
+        self.timing.config = profile_config.get("timing", {})
+        self.mouse.config = profile_config.get("mouse", {})
+        self.action.config = profile_config.get("action", {})
+        self.attention.config = profile_config.get("attention", {})
+
+        # Reset attention intervals for new profile
+        self.attention._tab_out_interval = self.attention._random_interval("tab_out")
+        self.attention._bank_check_interval = self.attention._random_interval(
+            "bank_check"
+        )
+        self.attention._skill_interval = self.attention._random_interval("skill_check")
+        self.attention._mouse_interval = self.attention._random_interval(
+            "mouse_movement"
+        )
+        self.attention._inventory_interval = self.attention._random_interval(
+            "inventory_check"
+        )
+
+        self.breaks.config = profile_config.get("breaks", {})
+
+        # Log the switch with detailed info
+        if self.bot is not None:
+            new_profile_info = ACTIVITY_PROFILE_CONFIGS[new_profile]
+            self.bot.log_msg("=" * 60)
+            self.bot.log_msg(f"[BEHAVIOR] PROFILE SWITCHED")
+            self.bot.log_msg("=" * 60)
+            self.bot.log_msg(f"Old: {old_profile_name}")
+            self.bot.log_msg(f"New: {new_profile.value} - {new_profile_info['name']}")
+            self.bot.log_msg(
+                f"Speed: {new_profile_info['timing']['speed_multiplier']}x"
+            )
+            self.bot.log_msg(
+                f"Tab-out: {'ENABLED' if new_profile_info['attention']['tab_out_enabled'] else 'DISABLED'}"
+            )
+            self.bot.log_msg(
+                f"Bank check: {'ENABLED' if new_profile_info['attention']['bank_check_enabled'] else 'DISABLED'}"
+            )
+            self.bot.log_msg(f"Total switches: {self.stats['profile_switches'] + 1}")
+            self.bot.log_msg("=" * 60)
+        self.increment_stat("profile_switches")
+
+    def get_current_profile(self) -> Optional[ActivityProfile]:
+        """
+        Get the current activity profile.
+
+        Returns:
+            Current ActivityProfile or None if using legacy profile
+        """
+        return self._activity_profile
+
+    def log_profile_status(self) -> None:
+        """
+        Log detailed information about the current profile and stats.
+
+        Useful for debugging or showing the user what profile is active.
+        """
+        # Log initialization if it hasn't been logged yet
+        self._log_init_if_pending()
+
+        if self.bot is None:
+            return
+
+        if self._activity_profile is None:
+            self.bot.log_msg("Using legacy profile system")
+            return
+
+        profile_info = ACTIVITY_PROFILE_CONFIGS[self._activity_profile]
+
+        self.bot.log_msg("=" * 60)
+        self.bot.log_msg("[BEHAVIOR] PROFILE STATUS")
+        self.bot.log_msg("=" * 60)
+        self.bot.log_msg(f"Current Profile: {profile_info['name']}")
+        self.bot.log_msg(f"Description: {profile_info['description']}")
+        self.bot.log_msg(
+            f"Speed Multiplier: {profile_info['timing']['speed_multiplier']}x"
+        )
+        self.bot.log_msg(f"Cycling: {'ENABLED' if self.cycle_enabled else 'DISABLED'}")
+        if self.cycle_enabled:
+            self.bot.log_msg(f"Inventories Completed: {self._inventory_count}")
+            self.bot.log_msg(
+                f"Profile Switches: {self.stats.get('profile_switches', 0)}"
+            )
+        self.bot.log_msg(
+            f"Tab-out: {'ENABLED' if profile_info['attention']['tab_out_enabled'] else 'DISABLED'}"
+        )
+        if self.stats.get("tab_out", 0) > 0:
+            self.bot.log_msg(f"  Tab-outs: {self.stats['tab_out']}")
+        self.bot.log_msg(
+            f"Bank Check: {'ENABLED' if profile_info['attention']['bank_check_enabled'] else 'DISABLED'}"
+        )
+        if self.stats.get("bank_check", 0) > 0:
+            self.bot.log_msg(f"  Bank checks: {self.stats['bank_check']}")
+        self.bot.log_msg("=" * 60)
 
     def start_fidgeting(self, bot) -> None:
         """

@@ -2,45 +2,43 @@
 A bot that completes agility courses in OSRS.
 """
 
+import random
 import time
 from model.bot import BotStatus
 import utilities.color as clr
 import utilities.random_util as rd
 from utilities.geometry import Point, Rectangle
 from model.osrs.osrs_bot import OSRSBot
-import utilities.imagesearch as imsearch
-from utilities.window import Window
 from utilities.options_builder import OptionsBuilder
+from utilities.behavior import BotBehaviorConfig
 import cv2
-import pyautogui as pag
 
 
 class AgilityBot(OSRSBot):
     def __init__(self):
         bot_title = "Agility Bot"
         description = "Completes agility courses automatically."
-        super().__init__(bot_title=bot_title, description=description)
+        # Pass behavior config to parent for proper initialization
+        super().__init__(
+            bot_title=bot_title,
+            description=description,
+            behavior_config=BotBehaviorConfig.skilling(),
+        )
         self.primary_skill = "agility"
 
         self.obstacle_color = clr.GREEN
         self.mark_color = clr.RED
         self.stuck_counter = 0
-        self.last_position = None
         self.no_obstacle_count = 0
         self.obstacle_count = 0
-        self.last_lap_count = None
         self.runtime_minutes = 60  # Default runtime in minutes
-        self.start_time = None
-        self.continue_color = clr.PURPLE  # Color([170, 0, 255])
-        self.continue2_color = clr.PINK  # Color([255, 0, 231])
+        self.continue_color = clr.GREEN  # Color([170, 0, 255])
+        self.continue2_color = clr.OFF_GREEN  # Color([255, 0, 231])
         self.last_continue = None  # Track which continue was last used
         self.last_was_continue = False  # Track if last action was a continue
 
         # Default options
         self.course = "Gnome"  # Default agility course
-        self.min_breaks = 1
-        self.max_breaks = 31
-        self.take_breaks = []
 
         # Enable default options - can be customized via Options button
         self.options_set = True
@@ -64,15 +62,6 @@ class AgilityBot(OSRSBot):
             "Agility Course",
             ["Seers", "Gnome", "Draynor", "Al Kharid", "Varrock", "Canifis"],
         )
-        self.options_builder.add_slider_option(
-            "min_breaks", "Minimum break time (seconds)", 1, 30
-        )
-        self.options_builder.add_slider_option(
-            "max_breaks", "Maximum break time (seconds)", 31, 120
-        )
-        self.options_builder.add_checkbox_option(
-            "take_breaks", "Take breaks between laps", ["Yes"]
-        )
         self.options_builder.add_text_edit_option(
             "runtime", "Runtime (minutes, 1-3600)", "60"
         )
@@ -83,9 +72,6 @@ class AgilityBot(OSRSBot):
         """
         self.options = options
         self.course = options["course"]
-        self.min_breaks = options["min_breaks"]
-        self.max_breaks = options["max_breaks"]
-        self.take_breaks = options["take_breaks"]
 
         # Validate and convert runtime
         try:
@@ -103,55 +89,6 @@ class AgilityBot(OSRSBot):
         self.log_msg(f"Bot will run for {self.runtime_minutes} minutes")
         self.options_set = True
 
-    def check_runtime(self) -> bool:
-        """
-        Check if the bot should continue running based on elapsed time
-        Returns: True if bot should continue, False if runtime exceeded
-        """
-        if self.start_time is None:
-            return True
-
-        elapsed_minutes = (time.time() - self.start_time) / 60
-        remaining_minutes = self.runtime_minutes - elapsed_minutes
-
-        # Log remaining time every 5 minutes
-        if int(elapsed_minutes) % 5 == 0:
-            self.log_msg(f"Time remaining: {remaining_minutes:.1f} minutes")
-
-        return elapsed_minutes < self.runtime_minutes
-
-    def cast_camelot_teleport(self):
-        """
-        Casts Camelot teleport spell
-        """
-        self.log_msg("Casting Camelot Teleport...")
-
-        # Use exact coordinates for Camelot teleport
-        teleport_point = Point(1751, 870)
-        self.log_msg(f"Clicking Camelot teleport at: {teleport_point}")
-        self.mouse.move_to(teleport_point)
-        self.mouse.click()
-
-        time.sleep(4)  # Wait for teleport animation
-        self.stuck_counter = 0
-        self.no_obstacle_count = 0
-
-    def cast_varrock_teleport(self):
-        """
-        Casts Camelot teleport spell
-        """
-        self.log_msg("Casting Camelot Teleport...")
-
-        # Use exact coordinates for Camelot teleport
-        teleport_point = Point(1751, 829)
-        self.log_msg(f"Clicking Camelot teleport at: {teleport_point}")
-        self.mouse.move_to(teleport_point)
-        self.mouse.click()
-
-        time.sleep(4)  # Wait for teleport animation
-        self.stuck_counter = 0
-        self.no_obstacle_count = 0
-
     def is_character_moving(self):
         """
         Checks if the character is currently moving by comparing screenshots
@@ -159,7 +96,7 @@ class AgilityBot(OSRSBot):
         """
         # Take first screenshot
         screenshot1 = self.win.game_view.screenshot()
-        time.sleep(0.3)  # Wait briefly
+        self.behavior.timing.sleep((0.2, 0.4))
         # Take second screenshot
         screenshot2 = self.win.game_view.screenshot()
 
@@ -195,7 +132,7 @@ class AgilityBot(OSRSBot):
                     return True
             else:
                 consecutive_still = 0
-            time.sleep(0.5)
+            self.behavior.timing.sleep((0.4, 0.6))
 
         self.log_msg("Movement wait timed out")
         return False
@@ -296,144 +233,116 @@ class AgilityBot(OSRSBot):
         """
         self.log_msg("Starting Agility Bot...")
         self.setup_camera()
-        self.start_time = time.time()
         last_obstacle_pos = None
         fails = 0
         self.obstacle_count = 0
 
+        # Use timed_session for runtime management (already in minutes)
         self.log_msg(f"Bot will run for {self.runtime_minutes} minutes")
 
-        while self.status == BotStatus.RUNNING:
-            # Check if runtime exceeded
-            if not self.check_runtime():
-                self.log_msg(
-                    f"Runtime of {self.runtime_minutes} minutes completed. Stopping bot..."
-                )
-                self.status = BotStatus.STOPPED
-                break
-            try:
-                # First check if we're at course end
-                if self.is_at_course_end():
-                    self.log_msg("Reached end of course...")
-                    time.sleep(1)
-                    if self.course == "Seers":
-                        self.cast_camelot_teleport()
-                    else:
-                        self.log_msg("No teleport needed for this course")
+        with self.timed_session(self.runtime_minutes) as session:
+            while session.running:
+                # Check for breaks
+                if self.behavior.breaks.should_take_break():
+                    self.log_msg("Taking a break...")
+                    self.behavior.breaks.take_break()
                     continue
 
-                # Find next obstacle first
-                obstacle = self.find_next_obstacle()
+                try:
+                    # First check if we're at course end
+                    if self.is_at_course_end():
+                        self.log_msg("Reached end of course, continuing...")
+                        self.behavior.timing.sleep((0.8, 1.2))
+                        continue
 
-                if obstacle:
-                    self.log_msg("Found obstacle...")
-                    self.no_obstacle_count = 0
-                    self.last_was_continue = False
-                    self.last_continue = None
+                    # Find next obstacle first
+                    obstacle = self.find_next_obstacle()
 
-                    # Check if we're stuck on same obstacle
-                    current_pos = (obstacle.left, obstacle.top)
-                    if last_obstacle_pos == current_pos:
-                        self.stuck_counter += 1
-                        self.log_msg(
-                            f"Same obstacle detected {self.stuck_counter} times"
-                        )
-                    else:
-                        self.stuck_counter = 0
-                        self.log_msg("New obstacle found")
-                    last_obstacle_pos = current_pos
-
-                    # If stuck for too long, just reset counters
-                    if self.stuck_counter > 5:
-                        self.log_msg(
-                            "Stuck on same obstacle for too long! Resetting counters..."
-                        )
-                        self.stuck_counter = 0
+                    if obstacle:
+                        self.log_msg("Found obstacle...")
                         self.no_obstacle_count = 0
-                        continue
+                        self.last_was_continue = False
+                        self.last_continue = None
 
-                    # Click the obstacle with some randomization
-                    click_point = obstacle.random_point()
-                    self.log_msg(f"Clicking obstacle at: {click_point}")
-                    self.mouse.move_to(click_point, mouseSpeed="medium")
-                    self.mouse.click()
+                        # Check if we're stuck on same obstacle
+                        current_pos = (obstacle.left, obstacle.top)
+                        if last_obstacle_pos == current_pos:
+                            self.stuck_counter += 1
+                            self.log_msg(
+                                f"Same obstacle detected {self.stuck_counter} times"
+                            )
+                        else:
+                            self.stuck_counter = 0
+                            self.log_msg("New obstacle found")
+                        last_obstacle_pos = current_pos
 
-                    self.obstacle_count += 1
-                    self.log_msg(
-                        f"Completed obstacle {self.obstacle_count} of {self.course_obstacles.get(self.course, '?')}"
-                    )
+                        # If stuck for too long, stop the bot
+                        if self.stuck_counter > 5:
+                            self.log_msg(
+                                "Stuck on same obstacle for too long! Stopping bot..."
+                            )
+                            # Take debug screenshot
+                            debug_img = self.win.game_view.screenshot()
+                            cv2.imwrite("debug_stuck_obstacle.png", debug_img)
+                            self.status = BotStatus.STOPPED
+                            break
 
-                    if self.course == "Canifis":
-                        time.sleep(1.5)
-                    else:
-                        time.sleep(0.5)
+                        # Click the obstacle with some randomization
+                        click_point = obstacle.random_point()
+                        self.log_msg(f"Clicking obstacle at: {click_point}")
+                        self.interaction_pre_click_delay()
+                        self.behavior.mouse.move_to(click_point, mouseSpeed="fast")
+                        self.behavior.mouse.click()
 
-                    timeout = 15 if self.course == "Canifis" else 10
-                    self.wait_for_movement_to_stop(timeout)
-                    continue
-
-                # Then check for mark of grace if no obstacle found
-                mark = self.find_mark_of_grace()
-                if mark:
-                    self.log_msg("Found mark of grace - collecting...")
-                    self.mouse.move_to(mark.random_point(), mouseSpeed="medium")
-                    self.mouse.click()
-                    time.sleep(0.5)
-                    self.wait_for_movement_to_stop()
-                    self.last_was_continue = False
-                    continue
-
-                # Then find next obstacle
-                obstacle = self.find_next_obstacle()
-
-                if obstacle:
-                    self.log_msg("Found obstacle...")
-                    self.no_obstacle_count = 0
-                    self.last_was_continue = False  # Reset continue status
-                    self.last_continue = None  # Reset continue tracking
-
-                    # Check if we're stuck on same obstacle
-                    current_pos = (obstacle.left, obstacle.top)
-                    if last_obstacle_pos == current_pos:
-                        self.stuck_counter += 1
+                        self.obstacle_count += 1
                         self.log_msg(
-                            f"Same obstacle detected {self.stuck_counter} times"
+                            f"Completed obstacle {self.obstacle_count} of {self.course_obstacles.get(self.course, '?')}"
                         )
-                    else:
-                        self.stuck_counter = 0
-                        self.log_msg("New obstacle found")
-                    last_obstacle_pos = current_pos
 
-                    # If stuck for too long, just reset counters
-                    if self.stuck_counter > 5:
-                        self.log_msg("Stuck on same obstacle for too long! ending...")
-                        self.status = BotStatus.STOPPED
+                        # Add delay based on course type
+                        if self.course == "Canifis":
+                            self.behavior.timing.sleep((1.3, 1.7))
+                        else:
+                            self.behavior.timing.sleep((0.4, 0.6))
+
+                        # Wait for movement to complete with randomized timeout
+                        if self.course == "Canifis":
+                            timeout = rd.truncated_normal_sample(
+                                13, 17, mean=15, std=1.2
+                            )  # 13-17 seconds
+                        else:
+                            timeout = rd.truncated_normal_sample(
+                                8, 12, mean=10, std=1.2
+                            )  # 8-12 seconds
+                        self.wait_for_movement_to_stop(timeout)
+
+                        # Occasionally perform random behaviors
+                        if rd.random_chance(0.15):
+                            self.behavior.attention.perform_random_behaviors()
+
                         continue
 
-                    # Click the obstacle with some randomization
-                    click_point = obstacle.random_point()
-                    self.log_msg(f"Clicking obstacle at: {click_point}")
-                    self.mouse.move_to(click_point, mouseSpeed="medium")
-                    self.mouse.click()
+                    # Then check for mark of grace if no obstacle found
+                    mark = self.find_mark_of_grace()
+                    if mark:
+                        self.log_msg("Found mark of grace - collecting...")
+                        self.interaction_pre_click_delay()
+                        self.behavior.mouse.move_to(
+                            mark.random_point(), mouseSpeed="fast"
+                        )
+                        self.behavior.mouse.click()
+                        self.behavior.timing.sleep((0.4, 0.6))
+                        self.wait_for_movement_to_stop()
+                        self.last_was_continue = False
+                        # Trigger profile cycling on mark collection
+                        self.behavior.on_inventory_complete()
 
-                    # Increment counter right after clicking
-                    self.obstacle_count += 1
-                    self.log_msg(
-                        f"Completed obstacle {self.obstacle_count} of {self.course_obstacles.get(self.course, '?')}"
-                    )
+                        # Occasionally perform random behaviors
+                        if rd.random_chance(0.15):
+                            self.behavior.attention.perform_random_behaviors()
+                        continue
 
-                    # Add longer delay for Canifis course
-                    if self.course == "Canifis":
-                        time.sleep(1.5)  # Longer initial delay for Canifis
-                    else:
-                        time.sleep(0.5)  # Original delay for other courses
-
-                    # Wait for movement to complete with adjusted timeout for Canifis
-                    timeout = 15 if self.course == "Canifis" else 10
-                    self.wait_for_movement_to_stop(timeout)
-
-                else:
-                    # Try to find continue squares if no obstacle found
+                    # Try to find continue squares if no obstacle or mark found
                     continue_square = None
                     if not self.last_was_continue:
                         # Try first continue square
@@ -444,44 +353,60 @@ class AgilityBot(OSRSBot):
 
                     if continue_square:
                         self.log_msg("Found continue square...")
-                        self.mouse.move_to(
-                            continue_square.random_point(), mouseSpeed="medium"
+                        self.interaction_pre_click_delay()
+                        self.behavior.mouse.move_to(
+                            continue_square.random_point(), mouseSpeed="fast"
                         )
-                        self.mouse.click()
-                        time.sleep(0.5)
+                        self.behavior.mouse.click()
+                        self.behavior.timing.sleep((0.4, 0.6))
                         self.wait_for_movement_to_stop()
                         self.last_was_continue = True
                         self.last_continue = 2 if self.last_continue == 1 else 1
                         self.no_obstacle_count = 0
+
+                        # Occasionally perform random behaviors
+                        if rd.random_chance(0.15):
+                            self.behavior.attention.perform_random_behaviors()
                     else:
                         self.log_msg(
                             f"No obstacle or continue square found (count: {self.no_obstacle_count})"
                         )
                         self.no_obstacle_count += 1
-                        if self.no_obstacle_count > 5:
+
+                        # Use progressive recovery actions (similar to mining bot)
+                        if self.no_obstacle_count <= 8:
                             self.log_msg(
-                                "No obstacles found for too long! Stopping bot..."
+                                f"Performing recovery action {self.no_obstacle_count}..."
+                            )
+                            self.perform_search_recovery(self.no_obstacle_count - 1)
+                            self.behavior.timing.sleep((0.6, 1.2))
+                        else:
+                            self.log_msg(
+                                "No obstacles found after recovery attempts! Stopping bot..."
                             )
                             # Take final debug screenshot
                             debug_img = self.win.game_view.screenshot()
                             cv2.imwrite("debug_no_obstacles_final.png", debug_img)
                             self.status = BotStatus.STOPPED
                             break
-                        time.sleep(1.5)
 
-                self.update_progress(0.5)
+                    self.update_progress(0.5)
 
-            except Exception as e:
-                self.log_msg(f"Error in main loop: {str(e)}")
-                fails += 1
-                if fails > 5:
-                    self.log_msg("Too many errors, stopping bot...")
-                    # Take final debug screenshot
-                    debug_img = self.win.game_view.screenshot()
-                    cv2.imwrite("debug_error_final.png", debug_img)
-                    self.status = BotStatus.STOPPED
-                    break
-                time.sleep(1.5)
+                except Exception as e:
+                    self.log_msg(f"Error in main loop: {str(e)}")
+                    fails += 1
+                    if fails > 5:
+                        self.log_msg("Too many errors, stopping bot...")
+                        # Take final debug screenshot
+                        debug_img = self.win.game_view.screenshot()
+                        cv2.imwrite("debug_error_final.png", debug_img)
+                        self.status = BotStatus.STOPPED
+                        break
+                    self.behavior.timing.sleep((1.3, 1.7))
+
+        self.log_msg(
+            f"Runtime of {self.runtime_minutes} minutes completed. Stopping bot..."
+        )
 
     def find_next_obstacle(self):
         """
@@ -568,12 +493,121 @@ class AgilityBot(OSRSBot):
         self.log_msg("Setting up camera...")
         # Set compass North
         self.set_compass_north()
-        # Switch to spellbook
-        self.log_msg("Switching to spellbook...")
-        pag.press("f4")
-        time.sleep(0.5)  # Small delay after switching
         # Set camera to highest angle
         self.move_camera(vertical=90)
+
+    def perform_search_recovery(self, attempt: int):
+        """
+        Progressive recovery actions when obstacles aren't found.
+
+        Similar to mining bot's _run_recovery, cycles through different
+        camera adjustments to find green tiles that are off-screen.
+
+        Args:
+            attempt: The attempt number (0-7), cycles through 6 recovery actions
+        """
+        import pyautogui as pag
+
+        stage = attempt % 6  # Cycle through 6 different recovery actions
+
+        if stage == 0:
+            # Light camera rotation left/right
+            self.log_msg("Recovery: Light camera rotation")
+            key = "left" if rd.random_chance(0.5) else "right"
+            if self._safe_key_down(key):
+                try:
+                    duration = rd.truncated_normal_sample(0.4, 0.9, mean=0.65, std=0.15)
+                    self.behavior.timing.sleep((duration, duration))
+                finally:
+                    self._safe_key_up(key)
+
+        elif stage == 1:
+            # Zoom out for wider view
+            self.log_msg("Recovery: Zoom out for wider view")
+            try:
+                if self._ensure_focus():
+                    center = self.win.game_view.get_center()
+                    self.behavior.mouse.move_to(center, mouseSpeed="fast")
+                    self.behavior.timing.sleep((0.1, 0.2))
+                    scroll_clicks = int(
+                        rd.truncated_normal_sample(3, 5, mean=4, std=0.6)
+                    )
+                    for _ in range(scroll_clicks):
+                        pag.scroll(-240)
+                        self.behavior.timing.sleep((0.05, 0.12))
+            except Exception as exc:
+                self.log_msg(f"Zoom out error: {exc}")
+
+        elif stage == 2:
+            # Larger rotation
+            self.log_msg("Recovery: Large camera rotation")
+            key = "left" if rd.random_chance(0.5) else "right"
+            if self._safe_key_down(key):
+                try:
+                    duration = rd.truncated_normal_sample(1.0, 1.8, mean=1.4, std=0.25)
+                    self.behavior.timing.sleep((duration, duration))
+                finally:
+                    self._safe_key_up(key)
+
+        elif stage == 3:
+            # Zoom in for closer view
+            self.log_msg("Recovery: Zoom in for closer view")
+            try:
+                if self._ensure_focus():
+                    center = self.win.game_view.get_center()
+                    self.behavior.mouse.move_to(center, mouseSpeed="fast")
+                    self.behavior.timing.sleep((0.1, 0.2))
+                    scroll_clicks = int(
+                        rd.truncated_normal_sample(2, 4, mean=3, std=0.6)
+                    )
+                    for _ in range(scroll_clicks):
+                        pag.scroll(240)
+                        self.behavior.timing.sleep((0.05, 0.12))
+            except Exception as exc:
+                self.log_msg(f"Zoom in error: {exc}")
+
+        elif stage == 4:
+            # Mini camera adjustment (vertical + small horizontal)
+            self.log_msg("Recovery: Mini camera adjustment")
+            try:
+                # Vertical adjustment
+                if rd.random_chance(0.7):
+                    v_key = "up" if rd.random_chance(0.5) else "down"
+                    if self._safe_key_down(v_key):
+                        try:
+                            duration = rd.truncated_normal_sample(
+                                0.2, 0.5, mean=0.35, std=0.1
+                            )
+                            self.behavior.timing.sleep((duration, duration))
+                        finally:
+                            self._safe_key_up(v_key)
+                        self.behavior.timing.sleep((0.1, 0.2))
+
+                # Small horizontal adjustment
+                if rd.random_chance(0.6):
+                    h_key = "left" if rd.random_chance(0.5) else "right"
+                    if self._safe_key_down(h_key):
+                        try:
+                            duration = rd.truncated_normal_sample(
+                                0.3, 0.6, mean=0.45, std=0.1
+                            )
+                            self.behavior.timing.sleep((duration, duration))
+                        finally:
+                            self._safe_key_up(h_key)
+            except Exception as exc:
+                self.log_msg(f"Mini camera adjust error: {exc}")
+
+        elif stage == 5:
+            # Full rotation to opposite direction
+            self.log_msg("Recovery: Full opposite rotation")
+            key = random.choice(["left", "right"])
+            if self._safe_key_down(key):
+                try:
+                    # Very long duration for near-180° turn
+                    duration = rd.truncated_normal_sample(1.8, 2.8, mean=2.3, std=0.3)
+                    self.behavior.timing.sleep((duration, duration))
+                finally:
+                    self._safe_key_up(key)
 
     def find_continue_square(self, continue_num=1):
         """
@@ -587,7 +621,7 @@ class AgilityBot(OSRSBot):
 
         # Select color based on continue number
         color = self.continue2_color if continue_num == 2 else self.continue_color
-        color_name = "PINK" if continue_num == 2 else "PURPLE"
+        color_name = "PINK" if continue_num == 2 else "GREEN"
         self.log_msg(f"Using color: {color_name}")
         self.log_msg(f"Color values - Lower: {color.lower}, Upper: {color.upper}")
 

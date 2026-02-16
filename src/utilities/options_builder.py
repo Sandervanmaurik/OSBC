@@ -118,13 +118,17 @@ class OptionsUI(customtkinter.CTkScrollableFrame):
         self.rowconfigure(0, weight=0)  # Title
         for i in range(self.num_of_options):
             self.rowconfigure(i + 1, weight=0)
-        self.rowconfigure(self.num_of_options + 1, weight=1)  # Spacing between Save btn and options
+        self.rowconfigure(
+            self.num_of_options + 1, weight=1
+        )  # Spacing between Save btn and options
         self.rowconfigure(self.num_of_options + 2, weight=0)  # Save btn
         self.columnconfigure(0, weight=0)
         self.columnconfigure(1, weight=1)
 
         # Title
-        self.lbl_example_bot_options = customtkinter.CTkLabel(master=self, text=f"{title} Options", font=subheading_font())
+        self.lbl_example_bot_options = customtkinter.CTkLabel(
+            master=self, text=f"{title} Options", font=subheading_font()
+        )
         self.lbl_example_bot_options.grid(row=0, column=0, padx=10, pady=20)
 
         # Dynamically place widgets
@@ -141,8 +145,15 @@ class OptionsUI(customtkinter.CTkScrollableFrame):
                 raise Exception("Unknown option type")
 
         # Save button
-        self.btn_save = customtkinter.CTkButton(master=self, text="Save", font=button_med_font(), command=lambda: self.save(window=parent))
-        self.btn_save.grid(row=self.num_of_options + 2, column=0, columnspan=2, pady=20, padx=20)
+        self.btn_save = customtkinter.CTkButton(
+            master=self,
+            text="Save",
+            font=button_med_font(),
+            command=lambda: self.save(window=parent),
+        )
+        self.btn_save.grid(
+            row=self.num_of_options + 2, column=0, columnspan=2, pady=20, padx=20
+        )
 
     def change_slider_val(self, key, value):
         self.slider_values[key].configure(text=str(int(value * 100)))
@@ -152,7 +163,9 @@ class OptionsUI(customtkinter.CTkScrollableFrame):
         Creates a slider widget and adds it to the view.
         """
         # Slider label
-        self.labels[key] = customtkinter.CTkLabel(master=self, text=value.title, font=small_font())
+        self.labels[key] = customtkinter.CTkLabel(
+            master=self, text=value.title, font=small_font()
+        )
         self.labels[key].grid(row=row, column=0, sticky="nsew", padx=10, pady=20)
         # Slider frame
         self.frames[key] = customtkinter.CTkFrame(master=self)
@@ -160,7 +173,9 @@ class OptionsUI(customtkinter.CTkScrollableFrame):
         self.frames[key].columnconfigure(1, weight=0)
         self.frames[key].grid(row=row, column=1, sticky="ew", padx=(0, 10))
         # Slider value indicator
-        self.slider_values[key] = customtkinter.CTkLabel(master=self.frames[key], text=str(value.min), font=small_font())
+        self.slider_values[key] = customtkinter.CTkLabel(
+            master=self.frames[key], text=str(value.min), font=small_font()
+        )
         self.slider_values[key].grid(row=0, column=1, padx=5)
         # Slider widget
         self.widgets[key] = customtkinter.CTkSlider(
@@ -177,7 +192,9 @@ class OptionsUI(customtkinter.CTkScrollableFrame):
         Creates checkbox widgets and adds them to the view.
         """
         # Checkbox label
-        self.labels[key] = customtkinter.CTkLabel(master=self, text=value.title, font=small_font())
+        self.labels[key] = customtkinter.CTkLabel(
+            master=self, text=value.title, font=small_font()
+        )
         self.labels[key].grid(row=row, column=0, padx=10, pady=20)
         # Checkbox frame
         self.frames[key] = customtkinter.CTkFrame(master=self)
@@ -187,35 +204,66 @@ class OptionsUI(customtkinter.CTkScrollableFrame):
         # Checkbox values
         self.widgets[key]: List[customtkinter.CTkCheckBox] = []
         for i, value in enumerate(value.values):
-            self.widgets[key].append(customtkinter.CTkCheckBox(master=self.frames[key], text=value, font=small_font()))
+            self.widgets[key].append(
+                customtkinter.CTkCheckBox(
+                    master=self.frames[key], text=value, font=small_font()
+                )
+            )
             self.widgets[key][i].grid(row=0, column=i, sticky="ew", padx=5, pady=5)
 
     def create_menu(self, key, value: OptionMenuInfo, row: int):
-        self.labels[key] = customtkinter.CTkLabel(master=self, text=value.title, font=small_font())
+        self.labels[key] = customtkinter.CTkLabel(
+            master=self, text=value.title, font=small_font()
+        )
         self.labels[key].grid(row=row, column=0, sticky="nsew", padx=10, pady=20)
         self.widgets[key] = customtkinter.CTkOptionMenu(
-            master=self, values=value.values, fg_color=("gray75", "gray22"), font=small_font(), dropdown_font=small_font()
+            master=self,
+            values=value.values,
+            fg_color=("gray75", "gray22"),
+            font=small_font(),
+            dropdown_font=small_font(),
         )
         self.widgets[key].grid(row=row, column=1, sticky="ew", padx=(0, 10))
 
     def create_text_edit(self, key, value: TextEditInfo, row: int):
-        self.labels[key] = customtkinter.CTkLabel(master=self, text=value.title, font=small_font())
+        self.labels[key] = customtkinter.CTkLabel(
+            master=self, text=value.title, font=small_font()
+        )
         self.labels[key].grid(row=row, column=0, sticky="nsew", padx=10, pady=20)
-        self.widgets[key] = customtkinter.CTkEntry(master=self, corner_radius=5, font=small_font(), placeholder_text=value.placeholder)
+        self.widgets[key] = customtkinter.CTkEntry(
+            master=self,
+            corner_radius=5,
+            font=small_font(),
+            placeholder_text=value.placeholder,
+        )
         self.widgets[key].grid(row=row, column=1, sticky="ew", padx=(0, 10))
+
+    def extract_options(self) -> dict:
+        """
+        Extract current option values from all widgets without destroying the window.
+
+        Returns:
+            Dictionary mapping option keys to their current values.
+        """
+        options = {}
+        for key, value in self.widgets.items():
+            if isinstance(value, customtkinter.CTkSlider):
+                options[key] = int(value.get() * 100)
+            elif isinstance(value, list):  # Checkboxes
+                options[key] = [
+                    checkbox.cget("text") for checkbox in value if checkbox.get()
+                ]
+            elif isinstance(
+                value, (customtkinter.CTkOptionMenu, customtkinter.CTkEntry)
+            ):
+                options[key] = value.get()
+        return options
 
     def save(self, window):
         """
         Gives controller a dictionary of options to save to the model. Destroys the window.
         """
-        self.options = {}
-        for key, value in self.widgets.items():
-            if isinstance(value, customtkinter.CTkSlider):
-                self.options[key] = int(value.get() * 100)
-            elif isinstance(value, list):  # Checkboxes
-                self.options[key] = [checkbox.cget("text") for checkbox in value if checkbox.get()]
-            elif isinstance(value, (customtkinter.CTkOptionMenu, customtkinter.CTkEntry)):
-                self.options[key] = value.get()
+        self.options = self.extract_options()
         # Send to controller
         self.controller.save_options(self.options)
         window.destroy()
