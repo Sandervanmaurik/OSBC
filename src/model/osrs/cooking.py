@@ -12,9 +12,10 @@ class OSRSCooking(OSRSBot):
     """
     Cooking bot for OSRS - bank-standing activities.
 
-    Supports two cooking methods:
+    Supports three cooking methods:
     1. Cook fish: Use raw fish on range/fire → wait for "Cooking"
     2. Make rations: Use cooked chicken on maple leaves → wait for "Making"
+    3. Make pineapple pizza: Use pineapple rings on plain pizza → wait for "Combining"
 
     Workflow (Cook fish):
     1. Check for raw fish in inventory
@@ -31,6 +32,12 @@ class OSRSCooking(OSRSBot):
     4. If no chicken → bank (deposit rations, withdraw chicken)
     5. Repeat
 
+    Workflow (Make pineapple pizza):
+    1. Check for pineapple rings and plain pizzas in inventory
+    2. If have both → use pineapple ring on plain pizza → wait for "Combining"
+    3. If missing either → bank (deposit pizzas, withdraw rings + plain pizzas)
+    4. Repeat
+
     USES BEHAVIOR SYSTEM:
     - BehaviorManager with bank-standing profile
     - Ultra-minimal camera movement
@@ -43,7 +50,7 @@ class OSRSCooking(OSRSBot):
     """
 
     # Cooking methods available
-    COOKING_METHODS = ["Cook fish", "Make rations"]
+    COOKING_METHODS = ["Cook fish", "Make rations", "Make pineapple pizza"]
 
     FISH_TYPES = [
         "Raw shrimp",
@@ -79,10 +86,17 @@ class OSRSCooking(OSRSBot):
     # Catalyst slot - maple leaves always stay here (stackable)
     CATALYST_SLOT = 0
 
+    # Pizza templates: (primary_template, secondary_template, output_template)
+    PIZZA_TEMPLATES = {
+        "primary": "pineapple_ring.png",
+        "secondary": "plain_pizza.png",
+        "output": "pineapple_pizza.png",
+    }
+
     def __init__(self) -> None:
         bot_title = "Cooking"
         description = (
-            "Cooks raw fish on a range or fire, or makes rations. "
+            "Cooks raw fish on a range or fire, or makes rations, or makes pineapple pizza. "
             "Bank-standing with human-like behavior. "
             "Requires GREEN-tagged bank. Fish cooking requires PURPLE-tagged range/fire."
         )
@@ -166,12 +180,14 @@ class OSRSCooking(OSRSBot):
                 self.options_set = False
                 return
 
-        self.log_msg(f"Running time: {self.running_time} minutes")
+        self.log_msg("Running time: {self.running_time} minutes")
         self.log_msg(f"Cooking method: {self.cooking_method}")
         if self.cooking_method == "Cook fish":
             self.log_msg(f"Fish type: {self.fish_type}")
-        else:
+        elif self.cooking_method == "Make rations":
             self.log_msg("Making Forester's rations (cooked chicken + maple leaves)")
+        elif self.cooking_method == "Make pineapple pizza":
+            self.log_msg("Making pineapple pizza (pineapple rings + plain pizza)")
         self.log_msg(
             f"[DEBUG] After save_options: cooking_method={self.cooking_method}, fish_type={self.fish_type}"
         )
@@ -185,12 +201,16 @@ class OSRSCooking(OSRSBot):
         """
         Main cooking loop with behavior system integration.
         Uses mixins for banking, item interaction, and action waiting.
-        Supports both fish cooking and ration making.
+        Supports fish cooking, ration making, and pineapple pizza making.
         """
         if self.cooking_method == "Cook fish":
             self.log_msg(f"[MAIN_LOOP START] cooking '{self.fish_type}'")
-        else:
+        elif self.cooking_method == "Make rations":
             self.log_msg("[MAIN_LOOP START] making Forester's rations")
+        elif self.cooking_method == "Make pineapple pizza":
+            self.log_msg("[MAIN_LOOP START] making pineapple pizza")
+        else:
+            self.log_msg(f"[MAIN_LOOP START] unknown method: {self.cooking_method}")
 
         try:
             self.log_msg("[DEBUG] Step 1: Checking inventory ready...")
@@ -247,8 +267,13 @@ class OSRSCooking(OSRSBot):
                     # Main cycle - branch based on cooking method
                     if self.cooking_method == "Cook fish":
                         cycle_success = self._cook_fish_cycle()
-                    else:
+                    elif self.cooking_method == "Make rations":
                         cycle_success = self._make_rations_cycle()
+                    elif self.cooking_method == "Make pineapple pizza":
+                        cycle_success = self._make_pizza_cycle()
+                    else:
+                        self.log_msg(f"Unknown cooking method: {self.cooking_method}")
+                        break
 
                     if not cycle_success:
                         # === Use behavior system for sleep ===
@@ -500,11 +525,134 @@ class OSRSCooking(OSRSBot):
                 self._safe_key_press("escape")
                 return False
 
-        if missing_input:
-            self.log_msg("Withdrawing cooked chicken...")
-            if not self.withdraw_items({input_template: "all"}):
-                self._safe_key_press("escape")
+        # Close bank
+        self._safe_key_press("escape")
+        self.behavior.timing.sleep((0.4, 0.9))
+        return True
+
+    # ========== PINEAPPLE PIZZA MAKING METHODS ==========
+
+    def _make_pizza_cycle(self) -> bool:
+        """
+        Pineapple pizza making cycle: check items -> make or bank.
+        Uses mixins for all operations.
+        """
+        # Get template paths
+        primary_template = self.PIZZA_TEMPLATES["primary"]
+        secondary_template = self.PIZZA_TEMPLATES["secondary"]
+        output_template = self.PIZZA_TEMPLATES["output"]
+
+        primary_path = self.get_template_path(primary_template, category="items")
+        secondary_path = self.get_template_path(secondary_template, category="items")
+
+        # Find items in inventory
+        primary_slots = self.find_items_in_inventory(primary_path, confidence=0.1)
+        secondary_slots = self.find_items_in_inventory(secondary_path, confidence=0.1)
+
+        # Check if we need to bank (missing either item)
+        if not primary_slots or not secondary_slots:
+            if not primary_slots:
+                self.log_msg("No pineapple rings, need to visit bank...")
+            if not secondary_slots:
+                self.log_msg("No plain pizzas, need to visit bank...")
+            return self._handle_pizza_banking(
+                output_template, primary_template, secondary_template
+            )
+
+        # We have both items, let's make pizzas
+        return self._make_pizza(primary_slots, secondary_slots)
+
+    def _make_pizza(self, primary_slots: List[int], secondary_slots: List[int]) -> bool:
+        """
+        Make pineapple pizza by using pineapple ring on plain pizza.
+        Uses ItemInteractionMixin and ActionWaitingMixin.
+        """
+        primary_template = self.PIZZA_TEMPLATES["primary"]
+        secondary_template = self.PIZZA_TEMPLATES["secondary"]
+
+        # Use item on item (pauses fidgeting automatically)
+        if not self.use_item_on_item(primary_template, secondary_template):
+            return False
+
+        # Press spacebar to confirm
+        if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
+            return False
+
+        # Wait for "Combining" to start (uses ActionWaitingMixin)
+        if not self.wait_for_action_start("Combining", self._making_start_timeout):
+            # Try spacebar again
+            if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
                 return False
+            if not self.wait_for_action_start("Combining", self._making_start_timeout):
+                self.log_msg("Combining did not start (no 'Combining' text).")
+                return False
+
+        # Wait for combining to end (uses ActionWaitingMixin)
+        combining_success = self.wait_for_action_end("Combining", self._making_end_timeout)
+
+        # Notify behavior manager that we completed an inventory
+        if combining_success:
+            self.behavior.on_inventory_complete()
+
+        return combining_success
+
+    def _handle_pizza_banking(
+        self,
+        output_template: str,
+        primary_template: str,
+        secondary_template: str,
+    ) -> bool:
+        """
+        Handle banking for pineapple pizza: deposit pizzas, withdraw ingredients.
+        Uses BankingMixin.
+
+        Args:
+            output_template: Template for pineapple pizzas
+            primary_template: Template for pineapple rings
+            secondary_template: Template for plain pizzas
+        """
+        # Open bank (uses BankingMixin)
+        if not self.open_bank(tag_color="green"):
+            self.log_msg("Failed to open bank.")
+            return False
+
+        # Ensure bank slots detected (uses BankingMixin)
+        if not self.ensure_bank_slots_detected():
+            self.log_msg("Cannot perform banking: bank slot detection failed.")
+            self._safe_key_press("escape")
+            return False
+
+        # Deposit pineapple pizzas
+        if not self.deposit_items({output_template: "all"}):
+            self._safe_key_press("escape")
+            return False
+
+        # Withdraw pineapple rings (bank set to withdraw-14)
+        self.log_msg("Withdrawing pineapple rings...")
+        if not self.withdraw_items({primary_template: "all"}):
+            self._safe_key_press("escape")
+            return False
+
+        # Withdraw plain pizzas (bank set to withdraw-14)
+        self.log_msg("Withdrawing plain pizzas...")
+        if not self.withdraw_items({secondary_template: "all"}):
+            self._safe_key_press("escape")
+            return False
+
+        # Verify both items were successfully withdrawn
+        primary_path = self.get_template_path(primary_template, category="items")
+        secondary_path = self.get_template_path(secondary_template, category="items")
+
+        primary_check = self.find_items_in_inventory(primary_path, confidence=0.1)
+        secondary_check = self.find_items_in_inventory(secondary_path, confidence=0.1)
+
+        if not primary_check or not secondary_check:
+            self.log_msg(
+                "Failed to withdraw both ingredients (bank may be empty). Stopping."
+            )
+            self._safe_key_press("escape")
+            self.set_status(BotStatus.STOPPED)
+            return False
 
         # Close bank
         self._safe_key_press("escape")
