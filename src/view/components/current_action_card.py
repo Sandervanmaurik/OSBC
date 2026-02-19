@@ -10,7 +10,7 @@ from view.fonts.fonts import *
 
 class CurrentActionCard(customtkinter.CTkFrame):
     """
-    A small card displaying the current bot action.
+    A small card displaying the current bot action and XP/hour rate.
     Updates in real-time by subscribing to BotSessionState.
     """
 
@@ -63,6 +63,9 @@ class CurrentActionCard(customtkinter.CTkFrame):
         # Initialize with current state
         self._update_display()
 
+        # Start periodic updates for XP/hour (updates every 2 seconds)
+        self._update_xp_hour_periodically()
+
     def _on_bot_state_changed(self, property_name=None, value=None):
         """
         Observer callback for BotSessionState changes.
@@ -70,6 +73,19 @@ class CurrentActionCard(customtkinter.CTkFrame):
         """
         # Schedule UI update on main thread (thread-safe for Tkinter)
         self.after_idle(self._update_display)
+
+    def _update_xp_hour_periodically(self):
+        """
+        Periodically update XP/hour display (every 2 seconds).
+        This ensures XP/hour updates even when no XP events occur.
+        """
+        # Update XP/hour only (action is updated via observer)
+        state = BotSessionState()
+        xp_per_hour = state.get_xp_per_hour()
+        self.lbl_xp_hour.configure(text=f"XP/Hour: {xp_per_hour:,}")
+
+        # Schedule next update in 2000ms (2 seconds)
+        self.after(2000, self._update_xp_hour_periodically)
 
     def _update_display(self):
         """
