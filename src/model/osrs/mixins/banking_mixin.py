@@ -215,6 +215,7 @@ class BankingMixin:
         self: "BotProtocol",
         items: Dict[str, Union[int, str]],
         exclude_slots: Optional[List[int]] = None,
+        confidence: float = 0.2,
     ) -> bool:
         """
         Deposit items from inventory by template name.
@@ -245,7 +246,9 @@ class BankingMixin:
             template_path = self.get_template_path(template_name, category="items")
 
             # Find items in inventory
-            item_slots = self.find_items_in_inventory(template_path, confidence=0.3)
+            item_slots = self.find_items_in_inventory(
+                template_path, confidence=confidence
+            )
 
             # Apply exclusion filter
             if exclude_slots:
@@ -265,7 +268,9 @@ class BankingMixin:
         self.log_msg(f"Depositing {len(slots_to_deposit)} item type(s)...")
         return self.deposit_items_shift_click(slots_to_deposit)
 
-    def withdraw_items(self: "BotProtocol", items: Dict[str, Union[int, str]]) -> bool:
+    def withdraw_items(
+        self: "BotProtocol", items: Dict[str, Union[int, str]], confidence: float = 0.1
+    ) -> bool:
         """
         Withdraw items from bank by template name.
 
@@ -289,10 +294,7 @@ class BankingMixin:
             template_path = self.get_template_path(template_name, category="items")
 
             # Find item in bank
-            result = self.find_item_in_bank(template_path, confidence=0.2)
-            print(
-                f"Finding {template_name} in bank with template {template_path} - result: {result}"
-            )
+            result = self.find_item_in_bank(template_path, confidence=confidence)
 
             if not result:
                 self.log_msg(f"{template_name} not found in bank! Stopping...")

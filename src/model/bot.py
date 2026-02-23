@@ -1030,7 +1030,7 @@ class Bot(ABC):
         self,
         item_template_path: str,
         confidence: float = 0.8,
-        crop_bottom_portion: float = 0.7,
+        crop_bottom_portion: float = 0.6,
     ) -> List[int]:
         """
         Find item in inventory using template matching.

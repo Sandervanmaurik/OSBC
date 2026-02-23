@@ -341,7 +341,7 @@ class ItemInteractionMixin:
         return self.find_item_in_inventory_visual(
             template_path,
             confidence=confidence,
-            crop_bottom_portion=0.7,  # Avoid item count overlays
+            crop_bottom_portion=0.5,  # Avoid item count overlays
         )
 
     def find_item_in_bank(
@@ -362,5 +362,5 @@ class ItemInteractionMixin:
         return self.find_item_in_bank_visual(
             template_path,
             confidence=confidence,
-            crop_bottom_portion=0.7,  # Avoid item count overlays
+            crop_bottom_portion=0.5,  # Avoid item count overlays
         )

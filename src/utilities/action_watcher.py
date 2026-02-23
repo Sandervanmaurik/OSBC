@@ -43,7 +43,15 @@ class ActionWatcher(BackgroundWatcher):
     POLL_INTERVAL = 0.5
 
     # Known actions to detect (extensible - add more as needed)
-    KNOWN_ACTIONS = ["Attaching", "Cutting", "Cooking", "Making", "Combining"]
+    KNOWN_ACTIONS = [
+        "Attaching",
+        "Cutting",
+        "Cooking",
+        "Making",
+        "Combining",
+        "Stringing",
+        "Gutting",
+    ]
 
     def __init__(self, window: Window):
         """

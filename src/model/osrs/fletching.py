@@ -26,46 +26,39 @@ class OSRSFletching(OSRSBot):
     - Custom break patterns integrated
     """
 
-    FLETCHING_METHODS = ["Headless arrows"]
+    FLETCHING_METHODS = ["Headless arrows", "Maple longbow", "Ruby bolt tips"]
 
     ITEM_TEMPLATES: Dict[str, Tuple[str, str]] = {
         "Headless arrows": ("feather.png", "arrow_shaft.png"),
     }
 
+    # Maple longbow templates: (primary, secondary, output)
+    LONGBOW_TEMPLATES = {
+        "primary": "maple_longbow_(u).png",
+        "secondary": "bow_string.png",
+        "output": "maple_longbow.png",
+    }
+
+    # Ruby bolt tips templates: (tool, input, output)
+    RUBY_BOLT_TIPS_TEMPLATES = {
+        "tool": "chisel.png",
+        "input": "ruby.png",
+        "output": "ruby_bolt_tips.png",
+    }
+
     def __init__(self) -> None:
         bot_title = "Fletching"
         description = (
-            "Fletches headless arrows by combining feathers with arrow shafts. "
-            "Fast, human-like clicking with short breaks and no camera movement."
+            "Fletches headless arrows or strings maple longbows. "
+            "Bank-standing with human-like behavior. "
+            "Maple longbow requires GREEN-tagged bank."
         )
 
         # === Configure behavior system ===
-        # Use "high-active" profile with customizations for fletching
-        behavior_config = BotBehaviorConfig(
-            profile="high-active",  # Fast, efficient profile
-            custom_config={
-                "timing": {
-                    "speed_multiplier": 0.8,  # Even faster for fletching
-                },
-                "mouse": {
-                    "default_speed": "fastest",  # Fast clicks for fletching
-                },
-                "action": {
-                    "misclick_chance": 0.03,  # Very low misclick (repetitive task)
-                    "hesitation_chance": 0.05,  # Low hesitation
-                },
-                "attention": {
-                    # Disable attention behaviors - standing at bank
-                    "camera_enabled": False,
-                    "skill_check_enabled": False,
-                    "mouse_movement_enabled": True,  # Keep mouse movements
-                    "mouse_movement_interval": (60.0, 180.0),  # Less frequent
-                    "inventory_check_enabled": False,  # Not needed
-                },
-                "breaks": {
-                    "enabled": False,  # We have custom break logic
-                },
-            },
+        # Bank-standing profile (works for both methods)
+        behavior_config = BotBehaviorConfig.bank_standing(
+            active=True,
+            cycle=True,
         )
 
         super().__init__(
@@ -89,7 +82,7 @@ class OSRSFletching(OSRSBot):
         self._prefer_primary_first = True
         self._order_flip_chance = 0.25
 
-        # Break timing
+        # Break timing (headless arrows only)
         self._next_break_at = 0.0
         self._break_min = 2.0
         self._break_max = 12.0
@@ -97,6 +90,14 @@ class OSRSFletching(OSRSBot):
         # Fletching timeouts
         self._attaching_start_timeout = 3.0
         self._attaching_end_timeout = 55.0
+
+        # Maple longbow stringing timeouts
+        self._stringing_start_timeout = 4.0
+        self._stringing_end_timeout = 90.0
+
+        # Ruby bolt tips cutting timeouts
+        self._cutting_start_timeout = 3.0
+        self._cutting_end_timeout = 90.0
 
     def create_options(self) -> None:
         self.options_builder.add_slider_option(
@@ -133,7 +134,10 @@ class OSRSFletching(OSRSBot):
             return
 
         self._open_inventory_tab()
-        self._schedule_next_break()
+
+        # Only schedule breaks for headless arrows
+        if self.fletching_method == "Headless arrows":
+            self._schedule_next_break()
 
         # === Initialize behavior display ===
         self.behavior.log_stats_summary(self.log_msg)
@@ -141,13 +145,14 @@ class OSRSFletching(OSRSBot):
             self.controller.update_behavior_display()
 
         # Track time for periodic stats logging
-        import time
-
         last_stats_log = time.time()
-        stats_log_interval = 300.0  # 5 minutes
+        stats_log_interval = (
+            300.0 if self.fletching_method == "Headless arrows" else 30.0
+        )
 
         with self.timed_session(self.running_time) as session:
-            self.behavior.start_fidgeting(self)
+            if self.fletching_method == "Headless arrows":
+                self.behavior.start_fidgeting(self)
             try:
                 while session.running:
                     if self._should_stop():
@@ -156,7 +161,7 @@ class OSRSFletching(OSRSBot):
                     # === NEW: Use attention behaviors (mouse movement only) ===
                     self.behavior.attention.perform_random_behaviors()
 
-                    # === Periodic stats logging (every 5 minutes) ===
+                    # === Periodic stats logging ===
                     now = time.time()
                     if now - last_stats_log >= stats_log_interval:
                         self.behavior.log_stats_summary(self.log_msg)
@@ -165,14 +170,27 @@ class OSRSFletching(OSRSBot):
                             self.controller.update_behavior_display(stats=stats)
                         last_stats_log = now
 
-                    if self._should_take_break():
-                        self._take_break()
-
                     if self.fletching_method == "Headless arrows":
+                        if self._should_take_break():
+                            self._take_break()
+
                         if not self._fletch_headless_arrows_cycle():
                             # === NEW: Use behavior system for sleep ===
                             self.behavior.timing.sleep((0.15, 0.4))
                             continue
+
+                    elif self.fletching_method == "Maple longbow":
+                        cycle_success = self._string_longbow_cycle()
+                        if not cycle_success:
+                            self.behavior.timing.sleep((0.15, 0.4))
+                            continue
+
+                    elif self.fletching_method == "Ruby bolt tips":
+                        cycle_success = self._cut_ruby_bolt_tips_cycle()
+                        if not cycle_success:
+                            self.behavior.timing.sleep((0.15, 0.4))
+                            continue
+
                     else:
                         self._stop_with_message(
                             f"Unsupported method: {self.fletching_method}"
@@ -181,7 +199,8 @@ class OSRSFletching(OSRSBot):
 
                     session.increment("cycles")
             finally:
-                self.behavior.stop_fidgeting()
+                if self.fletching_method == "Headless arrows":
+                    self.behavior.stop_fidgeting()
 
         self.log_msg("Fletching session complete.")
         if self.status == BotStatus.RUNNING:
@@ -259,7 +278,294 @@ class OSRSFletching(OSRSBot):
         )
         return (feather_slots, shaft_slots)
 
-    # === REMOVED: _click_inventory_slot() - now using ItemInteractionMixin.click_inventory_slot() ===
+    # ========== MAPLE LONGBOW STRINGING METHODS ==========
+
+    def _string_longbow_cycle(self) -> bool:
+        """
+        Maple longbow stringing cycle: check items -> string or bank.
+        Uses mixins for all operations.
+        """
+        primary_template = self.LONGBOW_TEMPLATES["primary"]
+        secondary_template = self.LONGBOW_TEMPLATES["secondary"]
+        output_template = self.LONGBOW_TEMPLATES["output"]
+
+        primary_path = self.get_template_path(primary_template, category="items")
+        secondary_path = self.get_template_path(secondary_template, category="items")
+
+        # Find items in inventory (higher confidence = more lenient matching)
+        primary_slots = self.find_items_in_inventory(primary_path, confidence=0.6)
+        secondary_slots = self.find_items_in_inventory(secondary_path, confidence=0.6)
+
+        # Check if we need to bank (missing either item)
+        if not primary_slots or not secondary_slots:
+            if not secondary_slots:
+                self.log_msg("No bow strings, need to visit bank...")
+            if not primary_slots:
+                self.log_msg("No maple longbow (u), need to visit bank...")
+
+            return self._handle_longbow_banking(
+                output_template, primary_template, secondary_template
+            )
+
+        # We have both items, let's string bows
+        return self._string_longbow(primary_slots, secondary_slots)
+
+    def _string_longbow(
+        self, primary_slots: List[int], secondary_slots: List[int]
+    ) -> bool:
+        """
+        String maple longbow by using maple longbow (u) on bow string.
+        Uses ItemInteractionMixin and ActionWaitingMixin.
+        """
+        # Use the already-found slots (efficient, avoids re-searching)
+        primary_slot = random.choice(primary_slots)
+        secondary_slot = random.choice(secondary_slots)
+
+        # Use item on item (pauses fidgeting automatically)
+        if not self.use_item_on_item(
+            primary_slot, secondary_slot, randomize_order=True
+        ):
+            return False
+
+        # Press spacebar to confirm
+        if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
+            return False
+
+        # Wait for "Stringing" to start (uses ActionWaitingMixin)
+        if not self.wait_for_action_start("Stringing", self._stringing_start_timeout):
+            # Try spacebar again
+            if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
+                return False
+            if not self.wait_for_action_start(
+                "Stringing", self._stringing_start_timeout
+            ):
+                self.log_msg("Stringing did not start (no 'Stringing' text).")
+                return False
+
+        # Wait for stringing to end (uses ActionWaitingMixin)
+        stringing_success = self.wait_for_action_end(
+            "Stringing", self._stringing_end_timeout
+        )
+
+        # Notify behavior manager that we completed an inventory
+        if stringing_success:
+            self.behavior.on_inventory_complete()
+
+        return stringing_success
+
+    def _handle_longbow_banking(
+        self,
+        output_template: str,
+        primary_template: str,
+        secondary_template: str,
+    ) -> bool:
+        """
+        Handle banking for maple longbow: deposit longbows, withdraw ingredients.
+        Uses BankingMixin.
+
+        Args:
+            output_template: Template for maple longbows (finished product)
+            primary_template: Template for maple longbow (u)
+            secondary_template: Template for bow strings
+        """
+        # Open bank (uses BankingMixin)
+        if not self.open_bank(tag_color="green"):
+            self.log_msg("Failed to open bank.")
+            return False
+
+        # Ensure bank slots detected (uses BankingMixin)
+        if not self.ensure_bank_slots_detected():
+            self.log_msg("Cannot perform banking: bank slot detection failed.")
+            self._safe_key_press("escape")
+            return False
+
+        # Deposit maple longbows (finished product)
+        if not self.deposit_items({output_template: "all"}, confidence=0.8):
+            self._safe_key_press("escape")
+            return False
+
+        # Withdraw maple longbow (u) (bank set to withdraw-14)
+        self.log_msg("Withdrawing maple longbow (u)...")
+        if not self.withdraw_items({primary_template: "all"}, confidence=0.6):
+            self._safe_key_press("escape")
+            return False
+
+        # Withdraw bow strings (bank set to withdraw-14)
+        self.log_msg("Withdrawing bow strings...")
+        if not self.withdraw_items({secondary_template: "all"}, confidence=0.4):
+            self._safe_key_press("escape")
+            return False
+
+        # Verify both items were successfully withdrawn
+        primary_path = self.get_template_path(primary_template, category="items")
+        secondary_path = self.get_template_path(secondary_template, category="items")
+
+        primary_check = self.find_items_in_inventory(primary_path, confidence=0.6)
+        secondary_check = self.find_items_in_inventory(secondary_path, confidence=0.4)
+
+        if not primary_check or not secondary_check:
+            self.log_msg(
+                "Failed to withdraw both ingredients (bank may be empty). Stopping."
+            )
+            self._safe_key_press("escape")
+            self.set_status(BotStatus.STOPPED)
+            return False
+
+        # Close bank
+        self._safe_key_press("escape")
+        self.behavior.timing.sleep((0.4, 0.9))
+        return True
+
+    # ========== RUBY BOLT TIPS CUTTING METHODS ==========
+
+    def _cut_ruby_bolt_tips_cycle(self) -> bool:
+        """
+        Ruby bolt tips cutting cycle: check items -> cut or bank.
+        Uses mixins for all operations.
+        """
+        tool_template = self.RUBY_BOLT_TIPS_TEMPLATES["tool"]
+        input_template = self.RUBY_BOLT_TIPS_TEMPLATES["input"]
+        output_template = self.RUBY_BOLT_TIPS_TEMPLATES["output"]
+
+        # Get template paths using TemplateMixin
+        tool_path = self.get_template_path(tool_template)
+        input_path = self.get_template_path(input_template)
+
+        # Find items in inventory (confidence tuned for gems/tools)
+        tool_slots = self.find_items_in_inventory(tool_path, confidence=0.1)
+        input_slots = self.find_items_in_inventory(input_path, confidence=0.1)
+
+        # Check if we need to bank (missing either item)
+        if not tool_slots or not input_slots:
+            if not tool_slots:
+                self.log_msg("No chisel, need to visit bank...")
+            if not input_slots:
+                self.log_msg("No rubies, need to visit bank...")
+
+            return self._handle_ruby_banking(
+                tool_template, input_template, output_template
+            )
+
+        # We have both items, let's cut bolt tips
+        return self._cut_ruby_bolt_tips(tool_slots, input_slots)
+
+    def _cut_ruby_bolt_tips(
+        self, tool_slots: List[int], input_slots: List[int]
+    ) -> bool:
+        """
+        Cut ruby bolt tips by using chisel on ruby.
+        Uses ItemInteractionMixin and ActionWaitingMixin.
+        """
+        # Randomly flip item click order (human behavior)
+        if random.random() < self._order_flip_chance:
+            self._prefer_primary_first = not self._prefer_primary_first
+
+        if self._prefer_primary_first:
+            primary_slots, secondary_slots = tool_slots, input_slots
+        else:
+            primary_slots, secondary_slots = input_slots, tool_slots
+
+        # Pick random slots
+        primary_slot = random.choice(primary_slots)
+        secondary_slot = random.choice(secondary_slots)
+
+        # Use item on item (pauses fidgeting automatically)
+        if not self.use_item_on_item(
+            primary_slot, secondary_slot, randomize_order=False
+        ):
+            return False
+
+        # Press spacebar to confirm
+        if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
+            return False
+
+        # Wait for "Cutting" to start (uses ActionWaitingMixin)
+        if not self.wait_for_action_start("Cutting", self._cutting_start_timeout):
+            # Try spacebar again
+            if not self.press_space_to_confirm(delay_range=(0.5, 1.5)):
+                return False
+            if not self.wait_for_action_start("Cutting", self._cutting_start_timeout):
+                self.log_msg("Cutting did not start (no 'Cutting' text).")
+                return False
+
+        # Wait for cutting to end (uses ActionWaitingMixin)
+        cutting_success = self.wait_for_action_end("Cutting", self._cutting_end_timeout)
+
+        # Notify behavior manager that we completed an inventory
+        if cutting_success:
+            self.behavior.on_inventory_complete()
+
+        return cutting_success
+
+    def _handle_ruby_banking(
+        self,
+        tool_template: str,
+        input_template: str,
+        output_template: str,
+    ) -> bool:
+        """
+        Handle banking for ruby bolt tips: deposit bolt tips, withdraw chisel + rubies.
+        Uses BankingMixin.
+
+        Args:
+            tool_template: Template for chisel
+            input_template: Template for rubies
+            output_template: Template for ruby bolt tips (finished product)
+        """
+        # Open bank (uses BankingMixin)
+        if not self.open_bank(tag_color="green"):
+            self.log_msg("Failed to open bank.")
+            return False
+
+        # Ensure bank slots detected (uses BankingMixin)
+        if not self.ensure_bank_slots_detected():
+            self.log_msg("Cannot perform banking: bank slot detection failed.")
+            self._safe_key_press("escape")
+            return False
+
+        # Deposit ruby bolt tips (finished product)
+        if not self.deposit_items({output_template: "all"}, confidence=0.3):
+            self._safe_key_press("escape")
+            return False
+
+        # Smart tool withdrawal: only withdraw if not already in inventory
+        tool_path = self.get_template_path(tool_template)
+        tool_check = self.find_items_in_inventory(tool_path, confidence=0.1)
+
+        if not tool_check:
+            self.log_msg("Withdrawing chisel...")
+            if not self.withdraw_items({tool_template: 1}, confidence=0.1):
+                self._safe_key_press("escape")
+                return False
+        else:
+            self.log_msg("Chisel already in inventory, skipping...")
+
+        # Withdraw rubies (bank set to withdraw-all or withdraw-X)
+        self.log_msg("Withdrawing rubies...")
+        if not self.withdraw_items({input_template: "all"}, confidence=0.1):
+            self._safe_key_press("escape")
+            return False
+
+        # Verify both items were successfully withdrawn
+        input_path = self.get_template_path(input_template)
+
+        tool_verify = self.find_items_in_inventory(tool_path, confidence=0.1)
+        input_verify = self.find_items_in_inventory(input_path, confidence=0.1)
+
+        if not tool_verify or not input_verify:
+            self.log_msg(
+                "Failed to withdraw chisel and rubies (bank may be empty). Stopping."
+            )
+            self._safe_key_press("escape")
+            self.set_status(BotStatus.STOPPED)
+            return False
+
+        # Close bank
+        self._safe_key_press("escape")
+        self.behavior.timing.sleep((0.4, 0.9))
+        return True
+
+    # ===== REMOVED: _click_inventory_slot() - now using ItemInteractionMixin.click_inventory_slot() =====
     # === REMOVED: _get_item_template_path() - now using TemplateMixin.get_template_path() ===
     # === REMOVED: _press_space_to_confirm() - now using ItemInteractionMixin.press_space_to_confirm() ===
 

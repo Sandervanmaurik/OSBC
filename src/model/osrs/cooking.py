@@ -12,10 +12,11 @@ class OSRSCooking(OSRSBot):
     """
     Cooking bot for OSRS - bank-standing activities.
 
-    Supports three cooking methods:
+    Supports four cooking methods:
     1. Cook fish: Use raw fish on range/fire → wait for "Cooking"
     2. Make rations: Use cooked chicken on maple leaves → wait for "Making"
     3. Make pineapple pizza: Use pineapple rings on plain pizza → wait for "Combining"
+    4. Gut yellowfin: Use knife on raw yellowfin → wait for "Gutting"
 
     Workflow (Cook fish):
     1. Check for raw fish in inventory
@@ -38,11 +39,20 @@ class OSRSCooking(OSRSBot):
     3. If missing either → bank (deposit pizzas, withdraw rings + plain pizzas)
     4. Repeat
 
+    Workflow (Gut yellowfin):
+    1. Knife persists in inventory (tool, never deposited)
+    2. Check for raw yellowfin in inventory
+    3. If have yellowfin → use knife on raw yellowfin → wait for "Gutting"
+    4. If no yellowfin → bank (deposit products, withdraw raw yellowfin, check for knife)
+    5. No spacebar confirmation (auto-starts, no Make-X dialog)
+    6. Products stack (yellow fin + fine fish offcuts)
+    7. Repeat
+
     USES BEHAVIOR SYSTEM:
     - BehaviorManager with bank-standing profile
     - Ultra-minimal camera movement
     - Human-like timing patterns
-    - ActionWatcher for "Cooking"/"Making" text detection
+    - ActionWatcher for "Cooking"/"Making"/"Combining"/"Gutting" text detection
 
     INHERITS FROM OSRSBot:
     - All mixins (TemplateMixin, BankingMixin, ItemInteractionMixin, ActionWaitingMixin)
@@ -50,7 +60,12 @@ class OSRSCooking(OSRSBot):
     """
 
     # Cooking methods available
-    COOKING_METHODS = ["Cook fish", "Make rations", "Make pineapple pizza"]
+    COOKING_METHODS = [
+        "Cook fish",
+        "Make rations",
+        "Make pineapple pizza",
+        "Gut yellowfin",
+    ]
 
     FISH_TYPES = [
         "Raw shrimp",
@@ -93,10 +108,18 @@ class OSRSCooking(OSRSBot):
         "output": "pineapple_pizza.png",
     }
 
+    # Yellowfin gutting templates: (tool, input, output1, output2)
+    YELLOWFIN_TEMPLATES = {
+        "tool": "knife.png",
+        "input": "raw_yellowfin.png",
+        "output1": "yellow_fin.png",
+        "output2": "fine_fish_offcuts.png",
+    }
+
     def __init__(self) -> None:
         bot_title = "Cooking"
         description = (
-            "Cooks raw fish on a range or fire, or makes rations, or makes pineapple pizza. "
+            "Cooks raw fish on a range or fire, makes rations, makes pineapple pizza, or guts yellowfin. "
             "Bank-standing with human-like behavior. "
             "Requires GREEN-tagged bank. Fish cooking requires PURPLE-tagged range/fire."
         )
@@ -133,6 +156,10 @@ class OSRSCooking(OSRSBot):
         # Ration-making timeouts
         self._making_start_timeout = 4.0
         self._making_end_timeout = 90.0  # Full inventory can take ~60-90s
+
+        # Yellowfin gutting timeouts
+        self._gutting_start_timeout = 4.0
+        self._gutting_end_timeout = 90.0  # Full inventory can take ~60-90s
 
     def create_options(self) -> None:
         self.options_builder.add_slider_option(
@@ -188,6 +215,8 @@ class OSRSCooking(OSRSBot):
             self.log_msg("Making Forester's rations (cooked chicken + maple leaves)")
         elif self.cooking_method == "Make pineapple pizza":
             self.log_msg("Making pineapple pizza (pineapple rings + plain pizza)")
+        elif self.cooking_method == "Gut yellowfin":
+            self.log_msg("Gutting yellowfin (knife + raw yellowfin)")
         self.log_msg(
             f"[DEBUG] After save_options: cooking_method={self.cooking_method}, fish_type={self.fish_type}"
         )
@@ -209,6 +238,8 @@ class OSRSCooking(OSRSBot):
             self.log_msg("[MAIN_LOOP START] making Forester's rations")
         elif self.cooking_method == "Make pineapple pizza":
             self.log_msg("[MAIN_LOOP START] making pineapple pizza")
+        elif self.cooking_method == "Gut yellowfin":
+            self.log_msg("[MAIN_LOOP START] gutting yellowfin")
         else:
             self.log_msg(f"[MAIN_LOOP START] unknown method: {self.cooking_method}")
 
@@ -271,6 +302,8 @@ class OSRSCooking(OSRSBot):
                         cycle_success = self._make_rations_cycle()
                     elif self.cooking_method == "Make pineapple pizza":
                         cycle_success = self._make_pizza_cycle()
+                    elif self.cooking_method == "Gut yellowfin":
+                        cycle_success = self._gut_yellowfin_cycle()
                     else:
                         self.log_msg(f"Unknown cooking method: {self.cooking_method}")
                         break
@@ -588,7 +621,9 @@ class OSRSCooking(OSRSBot):
                 return False
 
         # Wait for combining to end (uses ActionWaitingMixin)
-        combining_success = self.wait_for_action_end("Combining", self._making_end_timeout)
+        combining_success = self.wait_for_action_end(
+            "Combining", self._making_end_timeout
+        )
 
         # Notify behavior manager that we completed an inventory
         if combining_success:
@@ -635,7 +670,7 @@ class OSRSCooking(OSRSBot):
 
         # Withdraw plain pizzas (bank set to withdraw-14)
         self.log_msg("Withdrawing plain pizzas...")
-        if not self.withdraw_items({secondary_template: "all"}):
+        if not self.withdraw_items({secondary_template: "all"}, confidence=0.20):
             self._safe_key_press("escape")
             return False
 
@@ -644,11 +679,153 @@ class OSRSCooking(OSRSBot):
         secondary_path = self.get_template_path(secondary_template, category="items")
 
         primary_check = self.find_items_in_inventory(primary_path, confidence=0.1)
-        secondary_check = self.find_items_in_inventory(secondary_path, confidence=0.1)
+        secondary_check = self.find_items_in_inventory(secondary_path, confidence=0.20)
 
         if not primary_check or not secondary_check:
             self.log_msg(
                 "Failed to withdraw both ingredients (bank may be empty). Stopping."
+            )
+            self._safe_key_press("escape")
+            self.set_status(BotStatus.STOPPED)
+            return False
+
+        # Close bank
+        self._safe_key_press("escape")
+        self.behavior.timing.sleep((0.4, 0.9))
+        return True
+
+    # ========== YELLOWFIN GUTTING METHODS ==========
+
+    def _gut_yellowfin_cycle(self) -> bool:
+        """
+        Yellowfin gutting cycle: check items -> gut or bank.
+        Uses mixins for all operations.
+        """
+        tool_template = self.YELLOWFIN_TEMPLATES["tool"]
+        input_template = self.YELLOWFIN_TEMPLATES["input"]
+        output1_template = self.YELLOWFIN_TEMPLATES["output1"]
+        output2_template = self.YELLOWFIN_TEMPLATES["output2"]
+
+        # Get template paths using TemplateMixin
+        # knife.png auto-detects to "tools", raw_yellowfin.png uses "items"
+        tool_path = self.get_template_path(tool_template)
+        input_path = self.get_template_path(input_template, category="items")
+
+        # Find items in inventory
+        tool_slots = self.find_items_in_inventory(tool_path, confidence=0.1)
+        input_slots = self.find_items_in_inventory(input_path, confidence=0.1)
+
+        # Check if we need to bank (missing either item)
+        if not tool_slots or not input_slots:
+            if not tool_slots:
+                self.log_msg("No knife, need to visit bank...")
+            if not input_slots:
+                self.log_msg("No raw yellowfin, need to visit bank...")
+            return self._handle_yellowfin_banking(
+                tool_template, input_template, output1_template, output2_template
+            )
+
+        # We have both items, let's gut yellowfin
+        return self._gut_yellowfin(tool_slots, input_slots)
+
+    def _gut_yellowfin(self, tool_slots: List[int], input_slots: List[int]) -> bool:
+        """
+        Gut yellowfin by using knife on raw yellowfin.
+        Uses ItemInteractionMixin and ActionWaitingMixin.
+
+        Note: No spacebar confirmation needed - starts automatically.
+
+        Args:
+            tool_slots: List of inventory slot indices containing knife
+            input_slots: List of inventory slot indices containing raw yellowfin
+        """
+        # Use first slot of each (use_item_on_item accepts slot indices)
+        tool_slot = tool_slots[0]
+        input_slot = input_slots[0]
+
+        # Use item on item (pauses fidgeting automatically)
+        if not self.use_item_on_item(tool_slot, input_slot, randomize_order=True):
+            return False
+
+        # NO spacebar press - action starts automatically (no Make-X dialog)
+
+        # Wait for "Gutting" to start (uses ActionWaitingMixin)
+        if not self.wait_for_action_start("Gutting", self._gutting_start_timeout):
+            self.log_msg("Gutting did not start (no 'Gutting' text).")
+            return False
+
+        # Wait for gutting to end (uses ActionWaitingMixin)
+        gutting_success = self.wait_for_action_end("Gutting", self._gutting_end_timeout)
+
+        # Notify behavior manager that we completed an inventory
+        if gutting_success:
+            self.behavior.on_inventory_complete()
+
+        return gutting_success
+
+    def _handle_yellowfin_banking(
+        self,
+        tool_template: str,
+        input_template: str,
+        output1_template: str,
+        output2_template: str,
+    ) -> bool:
+        """
+        Handle banking for yellowfin gutting: deposit products, withdraw knife + raw yellowfin.
+        Uses BankingMixin.
+
+        Args:
+            tool_template: Template for knife
+            input_template: Template for raw yellowfin
+            output1_template: Template for yellow fin (product 1)
+            output2_template: Template for fine fish offcuts (product 2)
+        """
+        # Open bank (uses BankingMixin)
+        if not self.open_bank(tag_color="green"):
+            self.log_msg("Failed to open bank.")
+            return False
+
+        # Ensure bank slots detected (uses BankingMixin)
+        if not self.ensure_bank_slots_detected():
+            self.log_msg("Cannot perform banking: bank slot detection failed.")
+            self._safe_key_press("escape")
+            return False
+
+        # Deposit both product stacks (yellow fin + fine fish offcuts)
+        if not self.deposit_items(
+            {output1_template: "all", output2_template: "all"}, confidence=0.3
+        ):
+            self._safe_key_press("escape")
+            return False
+
+        # Smart tool withdrawal: only withdraw knife if not already in inventory
+        # knife.png auto-detects to "tools"
+        tool_path = self.get_template_path(tool_template)
+        tool_check = self.find_items_in_inventory(tool_path, confidence=0.1)
+
+        if not tool_check:
+            self.log_msg("Withdrawing knife...")
+            if not self.withdraw_items({tool_template: 1}, confidence=0.1):
+                self._safe_key_press("escape")
+                return False
+        else:
+            self.log_msg("Knife already in inventory, skipping...")
+
+        # Withdraw raw yellowfin (bank set to withdraw-26, single click)
+        self.log_msg("Withdrawing raw yellowfin...")
+        if not self.withdraw_items({input_template: "all"}, confidence=0.1):
+            self._safe_key_press("escape")
+            return False
+
+        # Verify both items were successfully withdrawn
+        input_path = self.get_template_path(input_template, category="items")
+
+        tool_verify = self.find_items_in_inventory(tool_path, confidence=0.1)
+        input_verify = self.find_items_in_inventory(input_path, confidence=0.1)
+
+        if not tool_verify or not input_verify:
+            self.log_msg(
+                "Failed to withdraw knife and raw yellowfin (bank may be empty). Stopping."
             )
             self._safe_key_press("escape")
             self.set_status(BotStatus.STOPPED)
